@@ -1,11 +1,9 @@
 # Build from the repo root: docker build -f deploy/Dockerfile.api .
 FROM golang:1.24-alpine AS build
 WORKDIR /src
-COPY go.work ./
+ENV GOWORK=off
 COPY packages/protocol ./packages/protocol
 COPY apps/api ./apps/api
-COPY agents/host/go.mod ./agents/host/go.mod
-COPY tools/rentpc-cli/go.mod ./tools/rentpc-cli/go.mod
 RUN cd apps/api && go mod download && CGO_ENABLED=0 go build -o /out/api ./cmd/api
 
 FROM alpine:3.20
