@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: rentpc-api
+    runtime: docker
+    dockerfilePath: ./deploy/Dockerfile.api
+    dockerContext: .
+    plan: starter
+    numInstances: 1            # relay is in-process; see docs/ARCHITECTURE.md §13
+    healthCheckPath: /healthz
+    envVars:
+      - key: DATABASE_URL
+        sync: false            # Neon connection string, sslmode=require
+      - key: PUBLIC_URL
+        sync: false            # https://rentpc-api.onrender.com
+      - key: WEB_ORIGINS
+        sync: false            # https://rentpc.vercel.app
+      - key: COOKIE_SECURE
+        value: "true"
