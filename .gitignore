@@ -1,0 +1,12 @@
+node_modules/
+.next/
+dist/
+bin/
+*.exe
+.env
+.env.local
+*.qcow2
+*.img
+.rentpc/
+coverage*
+.DS_Store

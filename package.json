@@ -1,0 +1,9 @@
+{
+  "name": "rentpc",
+  "private": true,
+  "scripts": {
+    "web": "pnpm --filter web dev",
+    "web:build": "pnpm --filter web build"
+  },
+  "packageManager": "pnpm@10.28.0"
+}
