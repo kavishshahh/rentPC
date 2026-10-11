@@ -23,7 +23,8 @@ export function Terminal({ rentalId, onConnected }: { rentalId: string; onConnec
       term.loadAddon(fit);
       term.open(ref.current);
       fit.fit();
-      const url = `${API_URL.replace(/^http/, "ws")}/v1/rentals/${rentalId}/terminal?cols=${term.cols}&rows=${term.rows}`;
+      const base = API_URL || window.location.origin;
+      const url = `${base.replace(/^http/, "ws")}/v1/rentals/${rentalId}/terminal?cols=${term.cols}&rows=${term.rows}`;
       ws = new WebSocket(url);
       ws.binaryType = "arraybuffer";
       ws.onopen = () => { setState("open"); onConnected?.(); term.focus(); };

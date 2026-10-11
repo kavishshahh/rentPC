@@ -1,0 +1,14 @@
+# SITE_ADDRESS is ":80" for plain-IP access, or "rentpc.example.com" for
+# automatic HTTPS once a domain points at the instance.
+{$SITE_ADDRESS}
+
+encode gzip
+
+@api path /v1/* /healthz
+handle @api {
+	reverse_proxy api:8080
+}
+
+handle {
+	reverse_proxy web:3000
+}
