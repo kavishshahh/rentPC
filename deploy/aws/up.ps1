@@ -19,7 +19,8 @@ param(
   [ValidateSet("t4g.nano","t4g.micro","t4g.small")] [string] $InstanceType = "t4g.small",
   [string] $Name = "rentpc"
 )
-$ErrorActionPreference = "Stop"
+# Native aws calls report "not found" on stderr; we check $LASTEXITCODE ourselves.
+$ErrorActionPreference = "Continue"
 $env:AWS_DEFAULT_REGION = "us-east-1"
 $Region = "us-east-1"
 $Tags = "project=colosseum,Name=$Name"
@@ -28,14 +29,25 @@ function Tagged($type) { "ResourceType=$type,Tags=[{Key=project,Value=colosseum}
 
 Write-Host "==> Checking AWS CLI and credentials"
 aws sts get-caller-identity --output text | Out-Null
+if ($LASTEXITCODE -ne 0) {
+  Write-Host ""
+  Write-Host "AWS credentials missing or invalid. In THIS window run:" -ForegroundColor Yellow
+  Write-Host '  $env:AWS_ACCESS_KEY_ID     = "AKIA..."'
+  Write-Host '  $env:AWS_SECRET_ACCESS_KEY = "..."'
+  Write-Host "then re-run this script."
+  exit 1
+}
 
-Write-Host "==> Latest Ubuntu 24.04 arm64 AMI"
-$Ami = aws ssm get-parameter --name /aws/service/canonical/ubuntu/server/24.04/stable/current/arm64/hvm/ebs-gp3/ami-id --query Parameter.Value --output text
+Write-Host "==> Latest Ubuntu 24.04 arm64 AMI (published by Canonical)"
+$Ami = aws ec2 describe-images --owners 099720109477 `
+  --filters "Name=name,Values=ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-arm64-server-*" "Name=state,Values=available" `
+  --query "sort_by(Images, &CreationDate)[-1].ImageId" --output text
+if ($LASTEXITCODE -ne 0 -or -not $Ami -or $Ami -eq "None") { Write-Host "Could not find the Ubuntu AMI (needs ec2:DescribeImages)." -ForegroundColor Red; exit 1 }
 Write-Host "    $Ami"
 
 Write-Host "==> Key pair"
 $KeyFile = "$PSScriptRoot\$Name-key.pem"
-$existing = aws ec2 describe-key-pairs --key-names "$Name-key" --query "KeyPairs[0].KeyName" --output text 2>$null
+$existing = aws ec2 describe-key-pairs --key-names "$Name-key" --query "KeyPairs[0].KeyName" --output text 2>&1 | Where-Object { $_ -notmatch "error|Error" }
 if ($existing -ne "$Name-key") {
   aws ec2 create-key-pair --key-name "$Name-key" --key-type ed25519 --tag-specifications (Tagged "key-pair") --query KeyMaterial --output text | Out-File -Encoding ascii $KeyFile
   Write-Host "    saved $KeyFile (keep it; it's your SSH key to the box)"
@@ -43,7 +55,7 @@ if ($existing -ne "$Name-key") {
 
 Write-Host "==> Security group (22 ssh, 80 http, 443 https)"
 $Vpc = aws ec2 describe-vpcs --filters Name=is-default,Values=true --query "Vpcs[0].VpcId" --output text
-$Sg = aws ec2 describe-security-groups --filters "Name=group-name,Values=$Name-sg" "Name=vpc-id,Values=$Vpc" --query "SecurityGroups[0].GroupId" --output text 2>$null
+$Sg = aws ec2 describe-security-groups --filters "Name=group-name,Values=$Name-sg" "Name=vpc-id,Values=$Vpc" --query "SecurityGroups[0].GroupId" --output text
 if (-not $Sg -or $Sg -eq "None") {
   $Sg = aws ec2 create-security-group --group-name "$Name-sg" --description "rentPC web+api" --vpc-id $Vpc --tag-specifications (Tagged "security-group") --query GroupId --output text
   foreach ($p in 22,80,443) { aws ec2 authorize-security-group-ingress --group-id $Sg --protocol tcp --port $p --cidr 0.0.0.0/0 | Out-Null }
@@ -51,7 +63,7 @@ if (-not $Sg -or $Sg -eq "None") {
 Write-Host "    $Sg"
 
 Write-Host "==> Elastic IP (stable public address)"
-$Alloc = aws ec2 describe-addresses --filters "Name=tag:Name,Values=$Name" --query "Addresses[0].AllocationId" --output text 2>$null
+$Alloc = aws ec2 describe-addresses --filters "Name=tag:Name,Values=$Name" --query "Addresses[0].AllocationId" --output text
 if (-not $Alloc -or $Alloc -eq "None") {
   $Alloc = aws ec2 allocate-address --domain vpc --tag-specifications (Tagged "elastic-ip") --query AllocationId --output text
 }
@@ -71,6 +83,7 @@ $InstanceId = aws ec2 run-instances `
   --tag-specifications (Tagged "instance") (Tagged "volume") `
   --user-data "file://$udFile" `
   --query "Instances[0].InstanceId" --output text
+if ($LASTEXITCODE -ne 0 -or -not $InstanceId) { Write-Host "Launch failed (see error above)." -ForegroundColor Red; exit 1 }
 Write-Host "    $InstanceId - waiting for it to be running"
 aws ec2 wait instance-running --instance-ids $InstanceId
 

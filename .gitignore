@@ -10,3 +10,8 @@ bin/
 .rentpc/
 coverage*
 .DS_Store
+
+# secrets / local deploy state
+*.pem
+deploy/aws/.env
+rentpc-repo.zip
