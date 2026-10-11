@@ -62,13 +62,14 @@ if (-not $Sg -or $Sg -eq "None") {
 }
 Write-Host "    $Sg"
 
-Write-Host "==> Elastic IP (stable public address)"
+Write-Host "==> Elastic IP (stable public address; optional)"
 $Alloc = aws ec2 describe-addresses --filters "Name=tag:Name,Values=$Name" --query "Addresses[0].AllocationId" --output text
 if (-not $Alloc -or $Alloc -eq "None") {
-  $Alloc = aws ec2 allocate-address --domain vpc --tag-specifications (Tagged "elastic-ip") --query AllocationId --output text
+  $Alloc = aws ec2 allocate-address --domain vpc --tag-specifications (Tagged "elastic-ip") --query AllocationId --output text 2>&1
+  if ($LASTEXITCODE -ne 0) { $Alloc = $null; Write-Host "    not permitted for this IAM user - using the instance's own public IP instead (changes if the instance is stopped)" -ForegroundColor Yellow }
 }
-$Ip = aws ec2 describe-addresses --allocation-ids $Alloc --query "Addresses[0].PublicIp" --output text
-Write-Host "    $Ip"
+$Ip = ""
+if ($Alloc) { $Ip = aws ec2 describe-addresses --allocation-ids $Alloc --query "Addresses[0].PublicIp" --output text; Write-Host "    $Ip" }
 
 Write-Host "==> Rendering user-data"
 $ud = Get-Content "$PSScriptRoot\user-data.sh" -Raw
@@ -87,8 +88,12 @@ if ($LASTEXITCODE -ne 0 -or -not $InstanceId) { Write-Host "Launch failed (see e
 Write-Host "    $InstanceId - waiting for it to be running"
 aws ec2 wait instance-running --instance-ids $InstanceId
 
-Write-Host "==> Attaching Elastic IP"
-aws ec2 associate-address --instance-id $InstanceId --allocation-id $Alloc | Out-Null
+if ($Alloc) {
+  Write-Host "==> Attaching Elastic IP"
+  aws ec2 associate-address --instance-id $InstanceId --allocation-id $Alloc | Out-Null
+} else {
+  $Ip = aws ec2 describe-instances --instance-ids $InstanceId --query "Reservations[0].Instances[0].PublicIpAddress" --output text
+}
 
 Write-Host ""
 Write-Host "Instance : $InstanceId ($InstanceType, $Region)"

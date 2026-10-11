@@ -23,6 +23,8 @@ chown -R ubuntu:ubuntu rentpc
 cd rentpc/deploy/aws
 
 PUBLIC_IP="__PUBLIC_IP__"
+# No Elastic IP was reserved: use the address this instance actually got.
+if [ -z "$PUBLIC_IP" ]; then PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4); fi
 DOMAIN="__DOMAIN__"
 if [ -n "$DOMAIN" ]; then
   PUBLIC_URL="https://$DOMAIN"; SITE_ADDRESS="$DOMAIN"; COOKIE_SECURE=true
