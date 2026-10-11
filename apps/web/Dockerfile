@@ -6,6 +6,7 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY apps/web/package.json apps/web/
 RUN pnpm install --frozen-lockfile --filter web
 COPY apps/web apps/web
+RUN mkdir -p apps/web/public
 # NEXT_PUBLIC_* is baked in at build time. Empty = same origin (behind Caddy).
 ARG NEXT_PUBLIC_API_URL=""
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
