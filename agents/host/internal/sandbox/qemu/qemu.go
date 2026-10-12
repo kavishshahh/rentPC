@@ -166,6 +166,7 @@ func (d *Driver) recover() {
 			v := &vm{meta: m, dir: dir, state: protocol.SandboxRunning}
 			d.boxes[m.RentalID] = v
 			d.startNetwork(v)
+			go d.watchAdopted(v)
 		} else {
 			slog.Info("cleaning stale sandbox dir", "rental", m.RentalID)
 			_ = os.RemoveAll(dir)
@@ -173,15 +174,28 @@ func (d *Driver) recover() {
 	}
 }
 
-func processAlive(pid int) bool {
-	p, err := os.FindProcess(pid)
-	if err != nil {
-		return false
+// processAlive is implemented per OS (prio_unix.go / prio_windows.go).
+
+// watchAdopted polls an adopted VM (we have no Cmd to Wait on) and marks it
+// failed if its process disappears.
+func (d *Driver) watchAdopted(v *vm) {
+	for {
+		time.Sleep(10 * time.Second)
+		d.mu.Lock()
+		cur := d.boxes[v.meta.RentalID]
+		d.mu.Unlock()
+		if cur != v {
+			return
+		}
+		if !processAlive(v.meta.PID) {
+			d.mu.Lock()
+			if v.state != protocol.SandboxStopping {
+				v.state, v.err = protocol.SandboxFailed, "qemu process disappeared"
+			}
+			d.mu.Unlock()
+			return
+		}
 	}
-	if runtime.GOOS == "windows" {
-		return true // FindProcess succeeds only for live processes on Windows
-	}
-	return p.Signal(nil) == nil
 }
 
 // ---- base image -----------------------------------------------------------------
@@ -674,6 +688,11 @@ write_files:
       HTTP_PROXY=%[4]s
       HTTPS_PROXY=%[4]s
       no_proxy=localhost,127.0.0.1
+  - path: /etc/systemd/system.conf.d/10-rentpc-proxy.conf
+    permissions: "0644"
+    content: |
+      [Manager]
+      DefaultEnvironment="http_proxy=%[4]s" "https_proxy=%[4]s" "HTTP_PROXY=%[4]s" "HTTPS_PROXY=%[4]s" "no_proxy=localhost,127.0.0.1"
   - path: /etc/apt/apt.conf.d/90rentpc-proxy
     permissions: "0644"
     content: |
@@ -689,6 +708,7 @@ write_files:
        the rental ends. Do not store anything you want to keep.
       ────────────────────────────────────────────────────────────
 runcmd:
+  - [ sh, -c, "systemctl daemon-reexec || true" ]
   - [ sh, -c, "systemctl disable --now snapd.service snapd.socket snapd.seeded.service 2>/dev/null || true" ]
   - [ sh, -c, "systemctl disable --now unattended-upgrades 2>/dev/null || true" ]
   - [ sh, -c, "growpart /dev/vda 1 2>/dev/null; resize2fs /dev/vda1 2>/dev/null || true" ]

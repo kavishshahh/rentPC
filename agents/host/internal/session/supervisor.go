@@ -18,6 +18,7 @@ import (
 
 	"github.com/cadencz/rentpc/agents/host/internal/client"
 	"github.com/cadencz/rentpc/agents/host/internal/hwdetect"
+	"github.com/cadencz/rentpc/agents/host/internal/keepawake"
 	"github.com/cadencz/rentpc/agents/host/internal/sandbox"
 	"github.com/cadencz/rentpc/packages/protocol"
 )
@@ -140,6 +141,7 @@ func (s *Supervisor) provision(ctx context.Context, id string, spec protocol.San
 		_ = s.Driver.Destroy(context.Background(), spec.RentalID)
 	} else {
 		slog.Info("sandbox ready", "rental", spec.RentalID, "sandbox", st.ID)
+		keepawake.Set(true)
 	}
 	_ = s.Client.Send(protocol.TypeProvisionResult, id, res)
 }
@@ -325,6 +327,7 @@ func (s *Supervisor) RunExpiryEnforcer(ctx context.Context) {
 			return
 		case <-t.C:
 			list, _ := s.Driver.List(ctx)
+			keepawake.Set(len(list) > 0)
 			for _, st := range list {
 				if !st.ExpiresAt.IsZero() && time.Now().After(st.ExpiresAt.Add(5*time.Minute)) {
 					slog.Warn("sandbox past expiry; destroying locally", "rental", st.RentalID)

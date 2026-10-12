@@ -3,9 +3,19 @@
 package qemu
 
 import (
+	"os"
 	"os/exec"
 	"syscall"
 )
+
+// processAlive reports whether pid exists (signal 0 = existence check).
+func processAlive(pid int) bool {
+	p, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	return p.Signal(syscall.Signal(0)) == nil
+}
 
 // lowerPriority keeps the owner's desktop responsive while a rental runs.
 func lowerPriority(cmd *exec.Cmd) {

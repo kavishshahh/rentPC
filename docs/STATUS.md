@@ -16,14 +16,22 @@
 * Rental page SSH section: per-OS CLI download and connect commands (icacls on Windows).
 * AWS single-box deployment (`deploy/aws`) live at http://44.222.123.73.
 
-## Not yet verified (needs real hardware)
+## Verified on real hardware (2026-10-12)
 
-* QEMU driver boot on **Windows + WHPX** and **macOS + HVF** — code paths are
-  written but no VM has been booted yet. Expect small fixes (QEMU flags,
-  firmware path on Apple Silicon, Windows path quoting). Follow
-  `docs/HOST-SETUP.md`.
-* cloud-init proxy env inside the guest, `growpart` of the overlay.
-* Egress policy from inside a real guest (unit-tested on the host side).
+* **macOS (Apple M1, HVF, arm64 Ubuntu 24.04)**: rented from a Windows PC
+  through the AWS relay. SSH via `rentpc tunnel` landed in the VM; disk
+  resized to the listed 20 GB; `curl https://pypi.org` → 200 via the egress
+  proxy; `10.0.2.2` (host) and `192.168.1.1` (LAN) refused by policy.
+* Bugs found and fixed in the process: 60 s request timeout was cutting
+  WebSocket sessions; `processAlive` on unix sent a nil signal so a
+  restarted agent deleted live VMs; added sleep prevention (caffeinate /
+  SetThreadExecutionState / systemd-inhibit) while rentals run.
+
+## Not yet verified
+
+* QEMU driver boot on **Windows + WHPX** (same code path; expected to work).
+* `apt-get update` through the proxy inside the guest (interrupted by the
+  timeout bug before it could finish).
 
 ## Known gaps / next steps (in order)
 
