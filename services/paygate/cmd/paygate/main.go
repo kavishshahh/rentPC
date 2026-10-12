@@ -55,10 +55,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	rpcURL := env("TEMPO_RPC_URL", "https://rpc.moderato.tempo.xyz")
+	currency := env("MPP_CURRENCY", tempo.PathUSDAddress)
 	method, err := charge.MethodFromConfig(charge.Config{
 		Store:      tempo.NewMemoryStore(), // single instance; use the Redis store when scaling out
-		RPCURL:     env("TEMPO_RPC_URL", "https://rpc.moderato.tempo.xyz"),
-		Currencies: []string{env("MPP_CURRENCY", tempo.OUSDAddress)},
+		RPCURL:     rpcURL,
+		Currencies: []string{currency},
 		Recipient:  recipient,
 	})
 	if err != nil {
@@ -143,19 +145,16 @@ func (g *gateway) rent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Direct host payout: one renter transaction, split between the host's
-	// wallet (price minus platform fee) and the treasury (the fee).
-	//
-	// Only for API-key callers (agents), which sign native Tempo transactions.
-	// A split is an atomic multi-call batch; browser wallets such as MetaMask
-	// cannot batch on Tempo yet (no EIP-7702 there), and viem refuses to
-	// downgrade an atomic batch to plain eth_sendTransaction. So browser
-	// payments stay a single transfer to the treasury and the host's share
-	// accrues to their in-app balance instead.
+	// Direct host payout: one renter transaction with two transfers — the
+	// host's share (price minus platform fee) to the host's wallet, the fee to
+	// the treasury — issued as an MPP split. Every supported payer signs
+	// native Tempo transactions and can batch atomically: agents (rentpc-pay /
+	// mppx with a key) and the browser's passkey wallet, an EIP-7702 account
+	// whose provider implements wallet_sendCalls. Plain EOA extension wallets
+	// (MetaMask) cannot batch on Tempo and are therefore not offered.
 	var splits []tempo.SplitParams
 	payoutCents := int64(0)
-	apiKeyCaller := strings.HasPrefix(r.Header.Get("Authorization"), "Bearer rpk_")
-	if apiKeyCaller && q.HostPayoutAddress != "" && q.HostPayoutCents > 0 && q.HostPayoutCents < q.TotalCents {
+	if q.HostPayoutAddress != "" && q.HostPayoutCents > 0 && q.HostPayoutCents < q.TotalCents {
 		payoutCents = q.HostPayoutCents
 		splits = []tempo.SplitParams{{Amount: cents(payoutCents), Recipient: q.HostPayoutAddress}}
 	}

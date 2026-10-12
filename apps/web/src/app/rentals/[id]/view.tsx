@@ -101,9 +101,14 @@ export default function RentalPage() {
           </a>
         )}
         {rental.host_payout_cents ? (
-          <Badge variant="outline" title={rental.host_payout_address ?? ""}>
-            host paid {money(rental.host_payout_cents, rental.currency)} on-chain
-          </Badge>
+          <a
+            href={rental.prepaid_ref?.startsWith("0x") ? `https://explore.tempo.xyz/tx/${rental.prepaid_ref}` : undefined}
+            target="_blank" rel="noreferrer" title={rental.host_payout_address ?? ""}
+          >
+            <Badge variant="outline">
+              host paid {money(rental.host_payout_cents, rental.currency)} on-chain
+            </Badge>
+          </a>
         ) : null}
       </div>
 

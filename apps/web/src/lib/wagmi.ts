@@ -7,7 +7,6 @@ import { Mppx, tempo } from "mppx/client";
 import { Chain } from "viem/tempo";
 import { createConfig, http } from "wagmi";
 import { getConnectorClient } from "wagmi/actions";
-import { injected } from "wagmi/connectors";
 import { webAuthn } from "wagmi/tempo";
 
 // Moderato, chain id 42431. viem waits max(blockTime*3, 5s) for a wallet-submitted
@@ -17,8 +16,11 @@ export const tempoChain = { ...Chain.testnet, blockTime: 60_000 } as unknown as 
 
 export const wagmiConfig = createConfig({
   chains: [tempoChain],
-  // webAuthn = passkey wallet (nothing to install); injected = MetaMask / Brave / Phantom etc.
-  connectors: [webAuthn(), injected()],
+  // Passkey wallet only: a Tempo EIP-7702 account that signs native Tempo
+  // transactions and batches calls atomically, which the MPP split payment
+  // (host share + platform fee in one tx) requires. Plain EOA extension
+  // wallets (MetaMask) cannot batch on Tempo, so they are not offered.
+  connectors: [webAuthn()],
   transports: { [tempoChain.id]: http() },
   ssr: true,
 });

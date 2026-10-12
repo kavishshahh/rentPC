@@ -4,7 +4,6 @@
 package auth
 
 import (
-	"regexp"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -14,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 

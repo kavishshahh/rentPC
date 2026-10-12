@@ -78,7 +78,7 @@ export function PayWithTempo({ listingId, hours, totalCents, currency, disabled 
     return (
       <div className="space-y-2 rounded-lg border p-3">
         <div className="flex items-center gap-2 text-sm font-medium"><Wallet className="size-4" /> Pay with a Tempo wallet</div>
-        <p className="text-xs text-muted-foreground">Stablecoin payment over MPP (HTTP 402) on Tempo testnet. A passkey wallet needs nothing installed.</p>
+        <p className="text-xs text-muted-foreground">Stablecoin payment over MPP (HTTP 402) on Tempo testnet with a passkey wallet (EIP-7702 account; nothing to install). One transaction pays the host and the platform fee.</p>
         <div className="flex flex-wrap gap-2">
           {connectors.map((c) => {
             const passkey = c.type === "webAuthn";
@@ -91,7 +91,7 @@ export function PayWithTempo({ listingId, hours, totalCents, currency, disabled 
             );
           })}
         </div>
-        {!secure && <p className="text-xs text-muted-foreground">Passkey wallets need HTTPS; open this page over https:// or use MetaMask.</p>}
+        {!secure && <p className="text-xs text-muted-foreground">Passkey wallets need HTTPS; open this page over https://.</p>}
         {connectError && <p className="text-xs text-destructive break-words">{connectError.message.split("\n")[0]}</p>}
         {error && <p className="text-xs text-destructive">{error}</p>}
       </div>

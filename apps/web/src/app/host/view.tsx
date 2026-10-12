@@ -125,7 +125,7 @@ export default function HostDashboard() {
         <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2"><Wallet className="size-4" /> Get paid on-chain</CardTitle></CardHeader>
         <CardContent className="space-y-2">
           <p className="text-sm text-muted-foreground">
-            Enter a Tempo wallet address and every rental an agent pays over MPP sends your share ({100 - 10}% of the price) straight to it in the renter&apos;s own transaction — the platform fee goes to the treasury, nothing is held for you. Browser rentals (MetaMask) are a single transfer, so their earnings accrue to your balance here.
+            Enter a Tempo wallet address and every rental paid over MPP sends your share ({100 - 10}% of the price) straight to it inside the renter&apos;s own transaction — one atomic transfer pays you and the platform fee at once. Nothing is held for you.
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <Input placeholder="0x… your Tempo wallet" value={payout} onChange={(e) => setPayout(e.target.value)} className="w-full max-w-md font-mono text-xs" spellCheck={false} />
