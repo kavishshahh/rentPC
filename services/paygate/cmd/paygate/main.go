@@ -145,9 +145,17 @@ func (g *gateway) rent(w http.ResponseWriter, r *http.Request) {
 
 	// Direct host payout: one renter transaction, split between the host's
 	// wallet (price minus platform fee) and the treasury (the fee).
+	//
+	// Only for API-key callers (agents), which sign native Tempo transactions.
+	// A split is an atomic multi-call batch; browser wallets such as MetaMask
+	// cannot batch on Tempo yet (no EIP-7702 there), and viem refuses to
+	// downgrade an atomic batch to plain eth_sendTransaction. So browser
+	// payments stay a single transfer to the treasury and the host's share
+	// accrues to their in-app balance instead.
 	var splits []tempo.SplitParams
 	payoutCents := int64(0)
-	if q.HostPayoutAddress != "" && q.HostPayoutCents > 0 && q.HostPayoutCents < q.TotalCents {
+	apiKeyCaller := strings.HasPrefix(r.Header.Get("Authorization"), "Bearer rpk_")
+	if apiKeyCaller && q.HostPayoutAddress != "" && q.HostPayoutCents > 0 && q.HostPayoutCents < q.TotalCents {
 		payoutCents = q.HostPayoutCents
 		splits = []tempo.SplitParams{{Amount: cents(payoutCents), Recipient: q.HostPayoutAddress}}
 	}
@@ -169,7 +177,7 @@ func (g *gateway) rent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if result.Challenge != nil {
-		slog.Info("402 issued", "listing", in.ListingID, "hours", in.Hours, "amount_cents", q.TotalCents)
+		slog.Info("402 issued", "listing", in.ListingID, "hours", in.Hours, "amount_cents", q.TotalCents, "split", payoutCents > 0)
 		server.WriteChallenges(w, result.Challenges, g.realm)
 		return
 	}
