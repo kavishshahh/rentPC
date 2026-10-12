@@ -161,6 +161,30 @@ func (s *Server) marketItem(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"item": it})
 }
 
+// quote returns the price of renting a listing for N hours; used by the
+// payment gateway to build the MPP challenge, and by clients to show totals.
+func (s *Server) quote(w http.ResponseWriter, r *http.Request) {
+	it, err := s.Machines.MarketItemByListing(r.Context(), chi.URLParam(r, "listingID"))
+	if err != nil {
+		mapErr(w, err)
+		return
+	}
+	hours := qInt(r, "hours")
+	if hours < 1 {
+		hours = 1
+	}
+	if hours < it.Listing.MinHours || hours > it.Listing.MaxHours {
+		writeErr(w, 400, "hours out of range for this listing")
+		return
+	}
+	total := int64(hours) * int64(it.Listing.PriceCentsPerHour)
+	writeJSON(w, 200, map[string]any{
+		"listing_id": it.Listing.ID, "hours": hours, "price_cents_per_hour": it.Listing.PriceCentsPerHour,
+		"total_cents": total, "currency": it.Listing.Currency, "available": it.Available,
+		"host_id": it.HostID, "title": it.Listing.Title,
+	})
+}
+
 // ---- Agent registration ---------------------------------------------------------------
 
 func (s *Server) agentRegister(w http.ResponseWriter, r *http.Request) {

@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/cadencz/rentpc/apps/api/internal/auth"
+	"github.com/cadencz/rentpc/apps/api/internal/payments"
 	"github.com/cadencz/rentpc/apps/api/internal/rentals"
 	"github.com/cadencz/rentpc/packages/protocol"
 )
@@ -39,12 +40,29 @@ func (s *Server) createRental(w http.ResponseWriter, r *http.Request) {
 	if in.Hours == 0 {
 		in.Hours = 1
 	}
+	var prepaid *rentals.Prepaid
+	if h := r.Header.Get(payments.PrepaidHeader); h != "" {
+		claim, err := payments.VerifyPrepaid(s.Cfg.PaygateSecret, h)
+		if err != nil {
+			writeErr(w, 402, "prepaid claim rejected: "+err.Error())
+			return
+		}
+		if claim.ListingID != in.ListingID || claim.Hours != in.Hours {
+			writeErr(w, 402, "prepaid claim does not match this request")
+			return
+		}
+		prepaid = &rentals.Prepaid{Provider: claim.Provider, Ref: claim.Ref, AmountCents: claim.AmountCents, Currency: claim.Currency}
+	}
 	rental, privKey, err := s.Rentals.Reserve(r.Context(), rentals.ReserveInput{
-		RenterID: auth.CurrentUser(r.Context()).ID, ListingID: in.ListingID, Hours: in.Hours,
+		RenterID: auth.CurrentUser(r.Context()).ID, ListingID: in.ListingID, Hours: in.Hours, Prepaid: prepaid,
 	})
 	if err != nil {
 		if strings.Contains(err.Error(), "hours must") {
 			writeErr(w, 400, err.Error())
+			return
+		}
+		if strings.Contains(err.Error(), "prepaid amount") {
+			writeErr(w, 402, err.Error())
 			return
 		}
 		mapErr(w, err)

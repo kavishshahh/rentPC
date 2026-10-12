@@ -9,6 +9,7 @@ apps/api          Go backend: REST, agent relay (WSS+yamux), lifecycle sweeper, 
 apps/web          Next.js 16 + TypeScript + Tailwind v4 + shadcn-style UI
 agents/host       Go host agent: hwdetect, registration, heartbeat, sandbox drivers (qemu, mock)
 tools/rentpc-cli  Renter CLI: ssh ProxyCommand tunnel + console terminal
+services/paygate  MPP (Tempo) payment gateway: HTTP 402 → stablecoin → rental (docs/WEB3.md)
 packages/protocol Shared agent⇄backend wire types
 docs/             ARCHITECTURE.md · SECURITY.md · STATUS.md · HOST-SETUP.md · DEMO.md
 deploy/           render.yaml, Dockerfile, docker-compose for local Postgres/Redis
@@ -58,4 +59,3 @@ cd apps/api && TEST_DATABASE_URL=postgres://... go test ./...             # 50-w
 ## Status
 
 See `docs/STATUS.md` for what is implemented, tested, and next.
-#

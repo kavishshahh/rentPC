@@ -16,6 +16,14 @@
 * Rental page SSH section: per-OS CLI download and connect commands (icacls on Windows).
 * AWS single-box deployment (`deploy/aws`) live at http://44.222.123.73.
 
+## Web3 (2026-10-12)
+
+* **MPP on Tempo** via `services/paygate` + prepaid claims in the API; agent
+  CLI `rentpc-pay`. API-side prepaid path verified locally (ledger, no
+  double settlement, 402 on bad/short claims). Gateway builds in Docker
+  (Go 1.26 / mpp-go main); on-chain verification needs a funded Moderato
+  testnet wallet — see docs/WEB3.md.
+
 ## Verified on real hardware (2026-10-12)
 
 * **macOS (Apple M1, HVF, arm64 Ubuntu 24.04)**: rented from a Windows PC

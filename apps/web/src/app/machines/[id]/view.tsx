@@ -6,6 +6,7 @@ import { ShieldCheck, Globe, Lock } from "lucide-react";
 import { api, ApiError, type MarketItem, type Rental } from "@/lib/api";
 import { gb, money } from "@/lib/utils";
 import { useAuth } from "@/components/auth-provider";
+import { PayWithTempo } from "@/components/pay-with-tempo";
 import { osLabel, StatusBadge } from "@/components/machine-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -103,10 +104,13 @@ export default function MachinePage() {
             <span className="font-medium">{money(l.price_cents_per_hour * hours, l.currency)}</span>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button className="w-full" disabled={!item.available || busy || !!isOwner} onClick={rent}>
-            {busy ? "Reserving…" : !item.online ? "Host offline" : !item.available ? "Currently rented" : isOwner ? "This is your machine" : user ? "Rent now" : "Sign in to rent"}
+          {user && item.available && !isOwner && (
+            <PayWithTempo listingId={l.id} hours={hours} totalCents={l.price_cents_per_hour * hours} currency={l.currency} disabled={busy} />
+          )}
+          <Button variant={user && item.available && !isOwner ? "outline" : "default"} className="w-full" disabled={!item.available || busy || !!isOwner} onClick={rent}>
+            {busy ? "Reserving…" : !item.online ? "Host offline" : !item.available ? "Currently rented" : isOwner ? "This is your machine" : user ? "Rent with mock billing (demo)" : "Sign in to rent"}
           </Button>
-          <p className="text-xs text-muted-foreground">Billing is mocked in this build: no real charge is made. Payment providers plug in behind a single interface.</p>
+          <p className="text-xs text-muted-foreground">Mock billing makes no real charge; the Tempo option pays the exact quote in stablecoins via MPP.</p>
         </CardContent>
       </Card>
     </div>

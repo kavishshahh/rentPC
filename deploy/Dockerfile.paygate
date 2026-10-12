@@ -1,0 +1,15 @@
+# Build from the repo root: docker build -f deploy/Dockerfile.paygate .
+FROM golang:1.26-alpine AS build
+RUN apk add --no-cache git
+WORKDIR /src
+ENV GOWORK=off GOFLAGS=-mod=mod
+COPY services/paygate ./services/paygate
+RUN cd services/paygate && go mod tidy && CGO_ENABLED=0 go build -o /out/paygate ./cmd/paygate && CGO_ENABLED=0 go build -o /out/rentpc-pay ./cmd/rentpc-pay
+
+FROM alpine:3.20
+RUN adduser -D -u 10001 app
+USER app
+COPY --from=build /out/paygate /usr/local/bin/paygate
+COPY --from=build /out/rentpc-pay /usr/local/bin/rentpc-pay
+EXPOSE 8090
+CMD ["paygate"]

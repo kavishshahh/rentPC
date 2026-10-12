@@ -4,6 +4,15 @@
 
 encode gzip
 
+# Rentals go through the payment gateway when enabled (RENT_UPSTREAM=paygate:8090).
+@rent {
+	path /v1/rentals
+	method POST
+}
+handle @rent {
+	reverse_proxy {$RENT_UPSTREAM}
+}
+
 @api path /v1/* /healthz
 handle @api {
 	reverse_proxy api:8080

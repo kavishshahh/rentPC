@@ -88,6 +88,8 @@ type Rental struct {
 	SSHPubKey            string                `json:"ssh_pubkey"`
 	SandboxID            *string               `json:"sandbox_id"`
 	FailureReason        *string               `json:"failure_reason"`
+	PrepaidProvider      *string               `json:"prepaid_provider"`
+	PrepaidRef           *string               `json:"prepaid_ref"`
 	CreatedAt            time.Time             `json:"created_at"`
 	UpdatedAt            time.Time             `json:"updated_at"`
 	// Derived
@@ -99,7 +101,7 @@ type Rental struct {
 const rentalCols = `r.id, r.listing_id, r.machine_id, r.host_id, r.renter_id, r.host_user_id, r.status,
 	r.hours_booked, r.price_cents_per_hour, r.currency, r.cpus, r.ram_mb, r.disk_gb, r.gpu_access,
 	r.reservation_expires_at, r.starts_at, r.ends_at, r.ssh_username, r.ssh_pubkey, r.sandbox_id,
-	r.failure_reason, r.created_at, r.updated_at, COALESCE(l.title,'')`
+	r.failure_reason, r.prepaid_provider, r.prepaid_ref, r.created_at, r.updated_at, COALESCE(l.title,'')`
 
 const rentalFrom = ` FROM rentals r LEFT JOIN listings l ON l.id = r.listing_id `
 
@@ -108,7 +110,7 @@ func (s *Service) scan(row pgx.Row) (*Rental, error) {
 	err := row.Scan(&r.ID, &r.ListingID, &r.MachineID, &r.HostID, &r.RenterID, &r.HostUserID, &r.Status,
 		&r.HoursBooked, &r.PriceCentsPerHour, &r.Currency, &r.CPUs, &r.RAMMB, &r.DiskGB, &r.GPUAccess,
 		&r.ReservationExpiresAt, &r.StartsAt, &r.EndsAt, &r.SSHUsername, &r.SSHPubKey, &r.SandboxID,
-		&r.FailureReason, &r.CreatedAt, &r.UpdatedAt, &r.MachineTitle)
+		&r.FailureReason, &r.PrepaidProvider, &r.PrepaidRef, &r.CreatedAt, &r.UpdatedAt, &r.MachineTitle)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -200,6 +202,17 @@ type ReserveInput struct {
 	RenterID  string
 	ListingID string
 	Hours     int
+	// Prepaid is set when an external protocol (MPP/Tempo, x402) already
+	// settled the full amount before the request reached us.
+	Prepaid *Prepaid
+}
+
+// Prepaid describes an up-front payment verified by the payment gateway.
+type Prepaid struct {
+	Provider    string // "mpp"
+	Ref         string // on-chain reference / receipt id
+	AmountCents int64
+	Currency    string
 }
 
 // Reserve atomically books the machine, generates the renter's SSH keypair,
@@ -252,13 +265,21 @@ func (s *Service) Reserve(ctx context.Context, in ReserveInput) (*Rental, string
 	}
 	privText := string(pem.EncodeToMemory(privPEM))
 
+	var prepaidProvider, prepaidRef *string
+	if in.Prepaid != nil {
+		expected := int64(in.Hours) * int64(price)
+		if in.Prepaid.AmountCents < expected {
+			return nil, "", fmt.Errorf("prepaid amount %d is less than the rental price %d", in.Prepaid.AmountCents, expected)
+		}
+		prepaidProvider, prepaidRef = &in.Prepaid.Provider, &in.Prepaid.Ref
+	}
 	var id string
 	err = s.DB.QueryRow(ctx, `INSERT INTO rentals(listing_id, machine_id, host_id, renter_id, host_user_id, status,
 		hours_booked, price_cents_per_hour, currency, cpus, ram_mb, disk_gb, gpu_access, reservation_expires_at,
-		ssh_pubkey, ssh_privkey)
-		VALUES($1,$2,$3,$4,$5,'reserved',$6,$7,$8,$9,$10,$11,$12,now()+$13::interval,$14,$15) RETURNING id`,
+		ssh_pubkey, ssh_privkey, prepaid_provider, prepaid_ref)
+		VALUES($1,$2,$3,$4,$5,'reserved',$6,$7,$8,$9,$10,$11,$12,now()+$13::interval,$14,$15,$16,$17) RETURNING id`,
 		in.ListingID, machineID, hostID, in.RenterID, hostUserID, in.Hours, price, currency, cpus, ram, disk, gpu,
-		s.Cfg.ReservationTTL.String(), pubLine, privText).Scan(&id)
+		s.Cfg.ReservationTTL.String(), pubLine, privText, prepaidProvider, prepaidRef).Scan(&id)
 	if err != nil {
 		if strings.Contains(err.Error(), "one_live_rental_per_machine") {
 			return nil, "", ErrNotAvailable
@@ -267,10 +288,20 @@ func (s *Service) Reserve(ctx context.Context, in ReserveInput) (*Rental, string
 	}
 	s.event(ctx, s.DB, id, "reserved", map[string]any{"hours": in.Hours})
 
-	maxCost := payments.Money{AmountCents: int64(in.Hours) * int64(price) * 2, Currency: currency} // allow one extension
-	if _, err := s.Payments.Authorize(ctx, in.RenterID, id, maxCost); err != nil {
-		_, _ = s.transition(ctx, id, []protocol.RentalStatus{protocol.RentalReserved}, protocol.RentalFailed, `, failure_reason=$4`, "payment authorization failed: "+err.Error())
-		return nil, "", fmt.Errorf("payment authorization failed: %w", err)
+	if in.Prepaid != nil {
+		// Money already moved on-chain: record it in the ledger now.
+		amt := payments.Money{AmountCents: in.Prepaid.AmountCents, Currency: in.Prepaid.Currency}
+		auth := &payments.Authorization{Ref: in.Prepaid.Ref, Amount: amt}
+		if err := (&payments.Mock{DB: s.DB}).CaptureAs(ctx, in.Prepaid.Provider, auth, amt, hostUserID, in.RenterID, id, payments.Fee(amt)); err != nil {
+			slog.Error("prepaid ledger write failed", "rental", id, "err", err)
+		}
+		s.event(ctx, s.DB, id, "prepaid", map[string]any{"provider": in.Prepaid.Provider, "ref": in.Prepaid.Ref, "amount_cents": in.Prepaid.AmountCents})
+	} else {
+		maxCost := payments.Money{AmountCents: int64(in.Hours) * int64(price) * 2, Currency: currency} // allow one extension
+		if _, err := s.Payments.Authorize(ctx, in.RenterID, id, maxCost); err != nil {
+			_, _ = s.transition(ctx, id, []protocol.RentalStatus{protocol.RentalReserved}, protocol.RentalFailed, `, failure_reason=$4`, "payment authorization failed: "+err.Error())
+			return nil, "", fmt.Errorf("payment authorization failed: %w", err)
+		}
 	}
 
 	spec := protocol.SandboxSpec{
@@ -460,6 +491,10 @@ func (s *Service) complete(ctx context.Context, r *Rental) {
 // settle charges the renter for the time actually used (rounded up to the
 // hour; prorated to the minute when the failure was not the renter's fault).
 func (s *Service) settle(ctx context.Context, r *Rental, prorate bool) {
+	if r.PrepaidRef != nil {
+		s.event(ctx, s.DB, r.ID, "settled", map[string]any{"prepaid": true, "ref": *r.PrepaidRef})
+		return // paid up-front on-chain; nothing to capture (refunds for early termination: roadmap)
+	}
 	if r.StartsAt == nil {
 		return
 	}

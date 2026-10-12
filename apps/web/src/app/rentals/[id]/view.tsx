@@ -90,6 +90,16 @@ export default function RentalPage() {
         <h1 className="text-2xl font-semibold tracking-tight">{rental.machine_title || "Rental"}</h1>
         <Badge variant={statusVariant[rental.status] ?? "secondary"}>{rental.status}</Badge>
         {!rental.host_online && live && <Badge variant="destructive">host offline</Badge>}
+        {rental.prepaid_provider && (
+          <a
+            href={rental.prepaid_ref?.startsWith("0x") ? `https://explore.tempo.xyz/tx/${rental.prepaid_ref}` : undefined}
+            target="_blank" rel="noreferrer" title={rental.prepaid_ref ?? ""}
+          >
+            <Badge variant="outline">
+              paid via {rental.prepaid_provider.toUpperCase()} on Tempo{rental.prepaid_ref ? ` · ${rental.prepaid_ref.slice(0, 10)}…` : ""}
+            </Badge>
+          </a>
+        )}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-4">

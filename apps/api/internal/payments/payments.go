@@ -57,21 +57,27 @@ func (m *Mock) Authorize(ctx context.Context, renterID, rentalID string, max Mon
 }
 
 func (m *Mock) Capture(ctx context.Context, auth *Authorization, actual Money, hostUserID, renterID, rentalID string, fee Money) error {
+	return m.CaptureAs(ctx, m.Name(), auth, actual, hostUserID, renterID, rentalID, fee)
+}
+
+// CaptureAs writes the ledger rows under an explicit provider name; used for
+// payments verified elsewhere (the MPP gateway) that only need recording.
+func (m *Mock) CaptureAs(ctx context.Context, provider string, auth *Authorization, actual Money, hostUserID, renterID, rentalID string, fee Money) error {
 	tx, err := m.DB.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(ctx)
 	ins := `INSERT INTO ledger_entries(rental_id, user_id, kind, amount_cents, currency, provider, provider_ref) VALUES($1,$2,$3,$4,$5,$6,$7)`
-	if _, err := tx.Exec(ctx, ins, rentalID, renterID, "charge", -actual.AmountCents, actual.Currency, m.Name(), auth.Ref); err != nil {
+	if _, err := tx.Exec(ctx, ins, rentalID, renterID, "charge", -actual.AmountCents, actual.Currency, provider, auth.Ref); err != nil {
 		return err
 	}
 	// Gross earning + separate negative fee row: the host's net is the sum.
-	if _, err := tx.Exec(ctx, ins, rentalID, hostUserID, "earning", actual.AmountCents, actual.Currency, m.Name(), auth.Ref); err != nil {
+	if _, err := tx.Exec(ctx, ins, rentalID, hostUserID, "earning", actual.AmountCents, actual.Currency, provider, auth.Ref); err != nil {
 		return err
 	}
 	if fee.AmountCents > 0 {
-		if _, err := tx.Exec(ctx, ins, rentalID, hostUserID, "fee", -fee.AmountCents, fee.Currency, m.Name(), auth.Ref); err != nil {
+		if _, err := tx.Exec(ctx, ins, rentalID, hostUserID, "fee", -fee.AmountCents, fee.Currency, provider, auth.Ref); err != nil {
 			return err
 		}
 	}

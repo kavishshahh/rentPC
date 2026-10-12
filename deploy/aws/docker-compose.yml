@@ -13,7 +13,26 @@ services:
       PUBLIC_URL: ${PUBLIC_URL}
       WEB_ORIGINS: ${PUBLIC_URL}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      PAYGATE_SECRET: ${PAYGATE_SECRET:-}
     expose: ["8080"]
+
+  # MPP (Tempo) payment gateway in front of POST /v1/rentals for API-key
+  # clients. Disabled (not started) unless MPP_RECIPIENT is set: use
+  #   docker compose --profile mpp up -d --build
+  paygate:
+    profiles: ["mpp"]
+    build:
+      context: ../..
+      dockerfile: deploy/Dockerfile.paygate
+    restart: unless-stopped
+    environment:
+      API_URL: http://api:8080
+      PAYGATE_SECRET: ${PAYGATE_SECRET}
+      MPP_SECRET_KEY: ${MPP_SECRET_KEY}
+      MPP_RECIPIENT: ${MPP_RECIPIENT}
+      MPP_REALM: ${MPP_REALM:-rentpc}
+      TEMPO_RPC_URL: ${TEMPO_RPC_URL:-https://rpc.moderato.tempo.xyz}
+    expose: ["8090"]
 
   web:
     build:
@@ -30,6 +49,7 @@ services:
     ports: ["80:80", "443:443"]
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+      RENT_UPSTREAM: ${RENT_UPSTREAM:-api:8080}   # set to paygate:8090 when the mpp profile is on
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

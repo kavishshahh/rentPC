@@ -50,7 +50,10 @@ export default function AccountPage() {
           <details className="text-sm">
             <summary className="cursor-pointer text-muted-foreground">API quick reference for agents</summary>
             <pre className="mt-2 overflow-x-auto rounded bg-muted p-3 text-xs">{`GET  /v1/market?min_cpus=4&min_ram_mb=8192&online=1     # discover
-POST /v1/rentals  {"listing_id": "...", "hours": 1}       # book → returns ssh_private_key once
+GET  /v1/market/{listing}/quote?hours=1                   # price before you pay
+POST /v1/rentals  {"listing_id": "...", "hours": 1}       # → 402 + WWW-Authenticate: Payment (MPP/Tempo)
+                                                          #   pay with mppx / rentpc-pay, retry with Payment-Authorization
+                                                          #   → 201 + Payment-Receipt; returns ssh_private_key once
 GET  /v1/rentals/{id}                                     # poll status: provisioning → ready → active
 WS   /v1/rentals/{id}/tunnel                              # raw TCP to guest:22 (rentpc tunnel)
 POST /v1/rentals/{id}/extend  {"hours": 1}

@@ -41,6 +41,7 @@ export type Rental = {
   cpus: number; ram_mb: number; disk_gb: number; gpu_access: string;
   reservation_expires_at: string; starts_at: string | null; ends_at: string | null;
   ssh_username: string; ssh_pubkey: string; sandbox_id: string | null; failure_reason: string | null;
+  prepaid_provider: string | null; prepaid_ref: string | null;
   created_at: string; updated_at: string; host_online: boolean; estimated_cost_cents: number; machine_title?: string;
 };
 

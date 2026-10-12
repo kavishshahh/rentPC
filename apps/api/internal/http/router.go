@@ -50,6 +50,7 @@ func (s *Server) Router() http.Handler {
 		// Marketplace (public reads)
 		r.Get("/market", s.market)
 		r.Get("/market/{listingID}", s.marketItem)
+		r.Get("/market/{listingID}/quote", s.quote)
 
 		// Hosts (owner side)
 		r.Group(func(r chi.Router) {
@@ -131,7 +132,8 @@ func (s *Server) cors(next http.Handler) http.Handler {
 		if origin != "" && (allowed[origin] || (s.Cfg.DevMode && strings.HasPrefix(origin, "http://localhost"))) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Payment-Authorization, X-RentPC-Pay")
+			w.Header().Set("Access-Control-Expose-Headers", "Payment-Receipt, WWW-Authenticate")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 			w.Header().Set("Vary", "Origin")
 		}

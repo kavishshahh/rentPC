@@ -5,4 +5,5 @@ use (
 	./apps/api
 	./agents/host
 	./tools/rentpc-cli
+	// ./services/paygate  (Go 1.26; built separately, see deploy/Dockerfile.paygate)
 )

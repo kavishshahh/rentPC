@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
-        with: { go-version: "1.24" }
+        with: { go-version: "1.26" }
       - name: Build
         env:
           GOOS: ${{ matrix.goos }}
@@ -36,6 +36,8 @@ jobs:
              -o ../../dist/rentpc-host-$GOOS-$GOARCH${{ matrix.ext }} ./cmd/rentpc-host)
           (cd tools/rentpc-cli && go build -trimpath -ldflags "-s -w" \
              -o ../../dist/rentpc-$GOOS-$GOARCH${{ matrix.ext }} .)
+          (cd services/paygate && GOFLAGS=-mod=mod go mod tidy && go build -trimpath -ldflags "-s -w" \
+             -o ../../dist/rentpc-pay-$GOOS-$GOARCH${{ matrix.ext }} ./cmd/rentpc-pay)
       - uses: actions/upload-artifact@v4
         with: { name: "bin-${{ matrix.goos }}-${{ matrix.goarch }}", path: dist/* }
   release:
