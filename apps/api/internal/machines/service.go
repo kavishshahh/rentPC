@@ -32,6 +32,7 @@ type Host struct {
 	ID              string     `json:"id"`
 	UserID          string     `json:"user_id"`
 	Name            string     `json:"name"`
+	Platform        string     `json:"platform"` // windows | darwin | linux
 	Registered      bool       `json:"registered"`
 	AgentVersion    *string    `json:"agent_version"`
 	Driver          *string    `json:"driver"`
@@ -98,17 +99,23 @@ type MarketItem struct {
 
 // CreateHost creates a host record and returns a one-time registration token
 // (valid 1 hour) the owner pastes into `rentpc-host register`.
-func (s *Service) CreateHost(ctx context.Context, userID, name string) (*Host, string, error) {
+// ValidPlatforms are the host OS families we ship an agent for.
+var ValidPlatforms = map[string]bool{"windows": true, "darwin": true, "linux": true}
+
+func (s *Service) CreateHost(ctx context.Context, userID, name, platform string) (*Host, string, error) {
+	if !ValidPlatforms[platform] {
+		return nil, "", errors.New("platform must be windows, darwin or linux")
+	}
 	if name = strings.TrimSpace(name); name == "" {
-		name = "My PC"
+		name = map[string]string{"windows": "My Windows PC", "darwin": "My Mac", "linux": "My Linux box"}[platform]
 	}
 	tok, hash, err := auth.NewToken()
 	if err != nil {
 		return nil, "", err
 	}
 	var id string
-	if err := s.DB.QueryRow(ctx, `INSERT INTO hosts(user_id, name, register_token_hash, register_expires_at)
-		VALUES($1,$2,$3,now()+interval '1 hour') RETURNING id`, userID, name, hash).Scan(&id); err != nil {
+	if err := s.DB.QueryRow(ctx, `INSERT INTO hosts(user_id, name, platform, register_token_hash, register_expires_at)
+		VALUES($1,$2,$3,$4,now()+interval '1 hour') RETURNING id`, userID, name, platform, hash).Scan(&id); err != nil {
 		return nil, "", err
 	}
 	h, err := s.GetHost(ctx, id)
@@ -163,8 +170,8 @@ func (s *Service) HostByAgentToken(ctx context.Context, tok string) (string, err
 func (s *Service) GetHost(ctx context.Context, id string) (*Host, error) {
 	h := &Host{}
 	var agentHash *string
-	err := s.DB.QueryRow(ctx, `SELECT id, user_id, name, agent_token_hash, agent_version, driver, status, last_heartbeat_at, created_at FROM hosts WHERE id=$1`, id).
-		Scan(&h.ID, &h.UserID, &h.Name, &agentHash, &h.AgentVersion, &h.Driver, &h.Status, &h.LastHeartbeatAt, &h.CreatedAt)
+	err := s.DB.QueryRow(ctx, `SELECT id, user_id, name, platform, agent_token_hash, agent_version, driver, status, last_heartbeat_at, created_at FROM hosts WHERE id=$1`, id).
+		Scan(&h.ID, &h.UserID, &h.Name, &h.Platform, &agentHash, &h.AgentVersion, &h.Driver, &h.Status, &h.LastHeartbeatAt, &h.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -246,8 +253,8 @@ func (s *Service) OnHello(ctx context.Context, hostID string, h protocol.Hello) 
 		hw.RAMMB, gpuVendor, gpuModel, vram, hw.DiskFreeGB, virt); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(ctx, `UPDATE hosts SET status='online', agent_version=$2, driver=$3, last_heartbeat_at=now() WHERE id=$1`,
-		hostID, h.AgentVersion, h.Driver); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE hosts SET status='online', agent_version=$2, driver=$3, platform=COALESCE(NULLIF($4,''), platform), last_heartbeat_at=now() WHERE id=$1`,
+		hostID, h.AgentVersion, h.Driver, hw.OSFamily); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)

@@ -1,0 +1,52 @@
+# Builds the host agent and renter CLI for every supported OS/arch when a
+# version tag is pushed, and attaches them to a GitHub Release. The web app
+# links to .../releases/latest/download/<asset>.
+#
+#   git tag v0.1.0 && git push --tags
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - { goos: windows, goarch: amd64, ext: ".exe" }
+          - { goos: darwin,  goarch: arm64, ext: "" }
+          - { goos: darwin,  goarch: amd64, ext: "" }
+          - { goos: linux,   goarch: amd64, ext: "" }
+          - { goos: linux,   goarch: arm64, ext: "" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.24" }
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p dist
+          V=${GITHUB_REF_NAME#v}
+          (cd agents/host && go build -trimpath -ldflags "-s -w -X main.version=$V" \
+             -o ../../dist/rentpc-host-$GOOS-$GOARCH${{ matrix.ext }} ./cmd/rentpc-host)
+          (cd tools/rentpc-cli && go build -trimpath -ldflags "-s -w" \
+             -o ../../dist/rentpc-$GOOS-$GOARCH${{ matrix.ext }} .)
+      - uses: actions/upload-artifact@v4
+        with: { name: "bin-${{ matrix.goos }}-${{ matrix.goarch }}", path: dist/* }
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: dist, merge-multiple: true }
+      - name: Checksums
+        run: cd dist && sha256sum * > SHA256SUMS.txt
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

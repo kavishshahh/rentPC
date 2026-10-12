@@ -21,7 +21,7 @@ export type Listing = {
 };
 
 export type Host = {
-  id: string; user_id: string; name: string; registered: boolean; agent_version: string | null; driver: string | null;
+  id: string; user_id: string; name: string; platform: "windows" | "darwin" | "linux"; registered: boolean; agent_version: string | null; driver: string | null;
   status: string; online: boolean; last_heartbeat_at: string | null; created_at: string;
   machine?: Machine | null; listing?: Listing | null;
 };

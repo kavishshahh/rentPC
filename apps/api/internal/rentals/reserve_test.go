@@ -40,7 +40,7 @@ func TestConcurrentReserve(t *testing.T) {
 	}
 	hub := relay.New(relay.Events{}, 1)
 	m := &machines.Service{DB: d, Online: func(string) bool { return true }} // pretend the agent is connected
-	host, _, err := m.CreateHost(ctx, owner.ID, "box")
+	host, _, err := m.CreateHost(ctx, owner.ID, "box", "linux")
 	if err != nil {
 		t.Fatal(err)
 	}

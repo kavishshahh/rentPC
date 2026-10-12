@@ -21,15 +21,23 @@ func (s *Server) listHosts(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) createHost(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Name string `json:"name"`
+		Name     string `json:"name"`
+		Platform string `json:"platform"`
 	}
 	_ = decode(r, &in)
-	h, tok, err := s.Machines.CreateHost(r.Context(), auth.CurrentUser(r.Context()).ID, in.Name)
+	if in.Platform == "" {
+		in.Platform = "windows"
+	}
+	h, tok, err := s.Machines.CreateHost(r.Context(), auth.CurrentUser(r.Context()).ID, in.Name, in.Platform)
 	if err != nil {
+		if strings.Contains(err.Error(), "platform must") {
+			writeErr(w, 400, err.Error())
+			return
+		}
 		mapErr(w, err)
 		return
 	}
-	writeJSON(w, 201, map[string]any{"host": h, "register_token": tok, "register_command": s.registerCommand(tok)})
+	writeJSON(w, 201, map[string]any{"host": h, "register_token": tok, "register_command": s.registerCommand(tok), "server": s.Cfg.PublicURL})
 }
 
 func (s *Server) registerCommand(tok string) string {
@@ -63,7 +71,7 @@ func (s *Server) rotateRegisterToken(w http.ResponseWriter, r *http.Request) {
 		mapErr(w, err)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"register_token": tok, "register_command": s.registerCommand(tok)})
+	writeJSON(w, 200, map[string]any{"register_token": tok, "register_command": s.registerCommand(tok), "server": s.Cfg.PublicURL})
 }
 
 func (s *Server) upsertListing(w http.ResponseWriter, r *http.Request) {

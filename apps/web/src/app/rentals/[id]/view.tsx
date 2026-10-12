@@ -3,7 +3,8 @@
 import * as React from "react";
 import { useParams } from "next/navigation";
 import { Download, KeyRound, TerminalSquare } from "lucide-react";
-import { api, ApiError, isLive, type Rental } from "@/lib/api";
+import { API_URL, api, ApiError, isLive, type Rental } from "@/lib/api";
+import { PLATFORMS, cliSetup, detectPlatform, type Platform } from "@/lib/releases";
 import { money, timeLeft } from "@/lib/utils";
 import { Terminal } from "@/components/terminal";
 import { Badge } from "@/components/ui/badge";
@@ -18,17 +19,17 @@ const statusVariant: Record<string, "default" | "secondary" | "destructive" | "s
 export default function RentalPage() {
   const { id } = useParams<{ id: string }>();
   const [rental, setRental] = React.useState<Rental | null>(null);
-  const [sshCmd, setSshCmd] = React.useState("");
   const [key, setKey] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [, tick] = React.useReducer((x: number) => x + 1, 0);
+  const [cliPlatform, setCliPlatform] = React.useState<Platform>("windows");
+  React.useEffect(() => { setCliPlatform(detectPlatform()); }, []);
 
   const load = React.useCallback(async () => {
     try {
-      const r = await api<{ rental: Rental; ssh_command: string }>(`/v1/rentals/${id}`);
+      const r = await api<{ rental: Rental }>(`/v1/rentals/${id}`);
       setRental(r.rental);
-      setSshCmd(r.ssh_command);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "failed to load");
     }
@@ -126,25 +127,47 @@ export default function RentalPage() {
             <CardDescription>Connect with your own tools through the relay. Your private key is generated per rental and shown once.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
-            <ol className="list-decimal space-y-2 pl-5">
-              <li>Install the CLI: <code className="rounded bg-muted px-1">go install github.com/cadencz/rentpc/tools/rentpc-cli@latest</code> (binary name <code>rentpc</code>), and set <code className="rounded bg-muted px-1">RENTPC_API_KEY</code> from Account → API keys.</li>
-              <li>
-                Save your key:{" "}
-                {key ? (
-                  <Button size="sm" variant="outline" onClick={downloadKey}><Download /> Download rentpc_{id.slice(0, 8)}.key</Button>
-                ) : (
-                  <Button size="sm" variant="outline" onClick={fetchKey}>Reveal private key (once)</Button>
-                )}
-                {" "}then <code className="rounded bg-muted px-1">chmod 600</code> it.
-              </li>
-              <li>Connect:<pre className="mt-1 overflow-x-auto rounded bg-muted p-2 text-xs">{sshCmd}</pre></li>
-            </ol>
-            <p className="text-xs text-muted-foreground">Inside the VM you are <code>renter</code> with passwordless sudo. Outbound internet uses the preset <code>http_proxy</code>; the host&apos;s LAN is unreachable by design.</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-muted-foreground">Your computer:</span>
+              {PLATFORMS.map((p) => (
+                <Button key={p.id} size="sm" variant={cliPlatform === p.id ? "default" : "outline"} onClick={() => setCliPlatform(p.id)}>{p.label}</Button>
+              ))}
+            </div>
+            {(() => {
+              const c = cliSetup(cliPlatform, apiBase(), id, id.slice(0, 8));
+              return (
+                <ol className="list-decimal space-y-3 pl-5">
+                  <li>
+                    Get the <code>rentpc</code> CLI and your API key (Account → API keys):
+                    <pre className="mt-1 overflow-x-auto rounded bg-muted p-2 text-xs">{c.install}</pre>
+                  </li>
+                  <li>
+                    Save your key:{" "}
+                    {key ? (
+                      <Button size="sm" variant="outline" onClick={downloadKey}><Download /> Download rentpc_{id.slice(0, 8)}.key</Button>
+                    ) : (
+                      <Button size="sm" variant="outline" onClick={fetchKey}>Reveal private key (once)</Button>
+                    )}
+                    {" "}then restrict it so ssh accepts it:
+                    <pre className="mt-1 overflow-x-auto rounded bg-muted p-2 text-xs">{c.keyNote}</pre>
+                  </li>
+                  <li>
+                    Connect (also works for <code>scp</code> and VS Code Remote-SSH with the same options):
+                    <pre className="mt-1 overflow-x-auto rounded bg-muted p-2 text-xs">{c.connect}</pre>
+                  </li>
+                </ol>
+              );
+            })()}
+            <p className="text-xs text-muted-foreground">Inside the VM you are <code>renter</code> with passwordless sudo. Outbound internet uses the preset <code>http_proxy</code>; the host&apos;s LAN is unreachable by design. The CLI is optional — the terminal above needs nothing installed.</p>
           </CardContent>
         </Card>
       )}
     </div>
   );
+}
+
+function apiBase() {
+  return API_URL || (typeof window !== "undefined" ? window.location.origin : "");
 }
 
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {

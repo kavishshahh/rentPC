@@ -3,9 +3,10 @@
 import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Copy, RefreshCw } from "lucide-react";
-import { api, ApiError, type Host, type Listing } from "@/lib/api";
+import { API_URL, api, ApiError, type Host, type Listing } from "@/lib/api";
 import { gb } from "@/lib/utils";
 import { osLabel } from "@/components/machine-card";
+import { hostPrereqs, hostSetupScript, platformLabel } from "@/lib/releases";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,7 +17,8 @@ export default function HostDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [host, setHost] = React.useState<Host | null>(null);
-  const [regCmd, setRegCmd] = React.useState<string | null>(null);
+  const [reg, setReg] = React.useState<{ token: string; server: string } | null>(null);
+  const [copied, setCopied] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [saved, setSaved] = React.useState(false);
   const [form, setForm] = React.useState({ title: "", description: "", price: "0.50", cpus: 2, ram_gb: 4, disk_gb: 20, min_hours: 1, max_hours: 24, is_active: true, country: "", region: "" });
@@ -32,15 +34,16 @@ export default function HostDetail() {
 
   React.useEffect(() => {
     load();
-    try { setRegCmd(sessionStorage.getItem(`rentpc_regcmd_${id}`)); } catch {}
+    try { const r = sessionStorage.getItem(`rentpc_reg_${id}`); if (r) setReg(JSON.parse(r)); } catch {}
     const t = setInterval(load, 5000);
     return () => clearInterval(t);
   }, [id, load]);
 
   async function newToken() {
-    const r = await api<{ register_command: string }>(`/v1/hosts/${id}/register-token`, { method: "POST" });
-    setRegCmd(r.register_command);
-    try { sessionStorage.setItem(`rentpc_regcmd_${id}`, r.register_command); } catch {}
+    const r = await api<{ register_token: string; server: string }>(`/v1/hosts/${id}/register-token`, { method: "POST" });
+    const v = { token: r.register_token, server: r.server };
+    setReg(v);
+    try { sessionStorage.setItem(`rentpc_reg_${id}`, JSON.stringify(v)); } catch {}
   }
 
   async function save(e: React.FormEvent) {
@@ -88,25 +91,34 @@ export default function HostDetail() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">1 · Run the host agent on this machine</CardTitle>
-          <CardDescription>The agent connects outbound only (no port forwarding) and runs each rental in its own VM.</CardDescription>
+          <CardTitle className="text-base">1 · Run the host agent on this {platformLabel(host.platform)} machine</CardTitle>
+          <CardDescription>The agent connects outbound only (no port forwarding) and runs each rental in its own VM. Nothing else is installed on the renter&apos;s behalf.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3 text-sm">
-          <ol className="list-decimal space-y-2 pl-5">
-            <li>Install QEMU (<a className="underline" href="https://www.qemu.org/download/" target="_blank" rel="noreferrer">qemu.org/download</a>). Windows: also enable <em>Windows Hypervisor Platform</em> in &ldquo;Turn Windows features on or off&rdquo; and reboot. Then run <code className="rounded bg-muted px-1">rentpc-host doctor</code>.</li>
-            <li>
-              Register (token valid 1 hour, single use):
-              {regCmd ? (
-                <div className="mt-1 flex items-center gap-2">
-                  <pre className="flex-1 overflow-x-auto rounded bg-muted p-2 text-xs">{regCmd}</pre>
-                  <Button size="icon" variant="outline" onClick={() => navigator.clipboard.writeText(regCmd)}><Copy /></Button>
-                </div>
+        <CardContent className="space-y-4 text-sm">
+          <div>
+            <div className="mb-1 font-medium">Before you start</div>
+            <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
+              {hostPrereqs(host.platform).map((t, i) => <li key={i}>{t}</li>)}
+            </ul>
+          </div>
+          <div>
+            <div className="mb-1 flex flex-wrap items-center gap-2 font-medium">
+              Then paste this into {host.platform === "windows" ? "PowerShell" : "Terminal"}
+              {reg ? (
+                <Button size="sm" variant="outline" className="ml-auto" onClick={() => { navigator.clipboard.writeText(hostSetupScript(host.platform, reg.server, reg.token)); setCopied(true); setTimeout(() => setCopied(false), 1500); }}>
+                  <Copy /> {copied ? "Copied" : "Copy"}
+                </Button>
               ) : (
-                <Button size="sm" variant="outline" className="ml-2" onClick={newToken}><RefreshCw /> {host.registered ? "Generate a new token (re-register)" : "Generate registration token"}</Button>
+                <Button size="sm" variant="outline" className="ml-auto" onClick={newToken}><RefreshCw /> {host.registered ? "Generate a new token (re-register)" : "Generate registration token"}</Button>
               )}
-            </li>
-            <li>Start it: <code className="rounded bg-muted px-1">rentpc-host run</code>. This page updates when the agent reports in.</li>
-          </ol>
+            </div>
+            <pre className="overflow-x-auto rounded bg-muted p-3 text-xs leading-relaxed">{hostSetupScript(host.platform, reg?.server ?? apiBase(), reg?.token ?? "")}</pre>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {reg ? "The token is single-use and valid for 1 hour." : "Generate a token to fill in the register line."} Keep the window open: the agent runs in the foreground and your machine goes offline when it exits.
+              {host.platform === "windows" && " Windows Defender may ask about qemu-system-x86_64.exe — allow it."}
+              {host.platform === "darwin" && " macOS may ask to allow network access for rentpc-host — allow it."}
+            </p>
+          </div>
           {m && (
             <div className="rounded-lg border p-3">
               <div className="font-medium">Detected hardware</div>
@@ -159,6 +171,10 @@ export default function HostDetail() {
       </Card>
     </div>
   );
+}
+
+function apiBase() {
+  return API_URL || (typeof window !== "undefined" ? window.location.origin : "");
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

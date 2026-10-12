@@ -3,10 +3,13 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus } from "lucide-react";
+import { Laptop, Monitor, Plus, Server } from "lucide-react";
 import { api, isLive, type Earnings, type Host, type Rental } from "@/lib/api";
 import { gb, money, timeLeft } from "@/lib/utils";
 import { useAuth } from "@/components/auth-provider";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
+import { PLATFORMS, detectPlatform, platformLabel, type Platform } from "@/lib/releases";
 import { osLabel } from "@/components/machine-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -37,14 +40,20 @@ export default function HostDashboard() {
     return () => clearInterval(t);
   }, [user, load]);
 
+  const [picking, setPicking] = React.useState(false);
+  const [platform, setPlatform] = React.useState<Platform>("windows");
+  const [newName, setNewName] = React.useState("");
+  React.useEffect(() => { setPlatform(detectPlatform()); }, []);
+
   async function addHost() {
     setBusy(true);
     try {
-      const r = await api<{ host: Host; register_token: string; register_command: string }>("/v1/hosts", { method: "POST", body: { name: "My PC" } });
-      try { sessionStorage.setItem(`rentpc_regcmd_${r.host.id}`, r.register_command); } catch {}
+      const r = await api<{ host: Host; register_token: string; server: string }>("/v1/hosts", { method: "POST", body: { name: newName, platform } });
+      try { sessionStorage.setItem(`rentpc_reg_${r.host.id}`, JSON.stringify({ token: r.register_token, server: r.server })); } catch {}
       router.push(`/host/${r.host.id}`);
     } finally {
       setBusy(false);
+      setPicking(false);
     }
   }
 
@@ -55,8 +64,42 @@ export default function HostDashboard() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold tracking-tight">Host dashboard</h1>
-        <Button onClick={addHost} disabled={busy}><Plus /> Add a machine</Button>
+        <Button onClick={() => setPicking(true)} disabled={busy}><Plus /> Add a machine</Button>
       </div>
+
+      {picking && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">What does this machine run?</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              {PLATFORMS.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setPlatform(p.id)}
+                  className={cn("rounded-lg border p-4 text-left transition hover:bg-accent", platform === p.id && "border-primary ring-1 ring-primary")}
+                >
+                  <div className="flex items-center gap-2 font-medium [&_svg]:size-4">
+                    {p.id === "windows" ? <Monitor /> : p.id === "darwin" ? <Laptop /> : <Server />} {p.label}
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">{p.blurb}</p>
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Name (optional)</label>
+                <Input placeholder={platform === "darwin" ? "MacBook Pro" : platform === "windows" ? "Gaming PC" : "Home server"} value={newName} onChange={(e) => setNewName(e.target.value)} className="w-64" />
+              </div>
+              <Button onClick={addHost} disabled={busy}>{busy ? "Creating…" : `Continue with ${platformLabel(platform)}`}</Button>
+              <Button variant="ghost" onClick={() => setPicking(false)}>Cancel</Button>
+            </div>
+            <p className="text-xs text-muted-foreground">GPU access is CPU-only on every platform in this version; the host&apos;s GPU is listed for information. Linux hosts get the first GPU tier later.</p>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-4">
         <Stat label="Net earnings" value={money(earnings?.total_cents ?? 0)} sub="after 10% platform fee" />
@@ -91,7 +134,7 @@ export default function HostDashboard() {
                       <div className="mt-1">{h.listing ? (h.listing.is_active ? `Listed at ${money(h.listing.price_cents_per_hour, h.listing.currency)}/h` : "Listing paused") : "No listing yet"} · driver {h.driver ?? "—"}</div>
                     </>
                   ) : (
-                    <div>Agent has not reported hardware yet.</div>
+                    <div>{platformLabel(h.platform)} · agent not set up yet — open to see the install steps.</div>
                   )}
                 </CardContent>
               </Card>

@@ -9,6 +9,13 @@
 | Renter CLI | `rentpc tunnel` (ProxyCommand), `rentpc term`, `rentpc ssh` | Used to drive the PTY path in the smoke run |
 | Web | Marketplace with filters, machine detail + rent, rental page with live xterm.js terminal, extend/terminate, one-time private key download, SSH instructions, my rentals, host dashboard (earnings, machines, rentals), host detail (agent setup command, detected hardware, listing editor, location), account/API keys | `next build`, Playwright run through the whole flow with screenshots |
 
+## Added 2026-10-12 (evening)
+
+* Hosts choose a platform (Windows / macOS / Linux) when adding a machine; the host page shows platform-specific prerequisites and a copy-paste download → register → run script using prebuilt binaries from GitHub Releases.
+* `.github/workflows/release.yml` builds `rentpc-host` and `rentpc` for windows/amd64, darwin/arm64+amd64, linux/amd64+arm64 on every `v*` tag.
+* Rental page SSH section: per-OS CLI download and connect commands (icacls on Windows).
+* AWS single-box deployment (`deploy/aws`) live at http://44.222.123.73.
+
 ## Not yet verified (needs real hardware)
 
 * QEMU driver boot on **Windows + WHPX** and **macOS + HVF** — code paths are
