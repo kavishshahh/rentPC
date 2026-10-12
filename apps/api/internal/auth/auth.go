@@ -4,6 +4,7 @@
 package auth
 
 import (
+	"regexp"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -95,6 +96,8 @@ type User struct {
 	Email       string    `json:"email"`
 	DisplayName string    `json:"display_name"`
 	CreatedAt   time.Time `json:"created_at"`
+	// PayoutAddress is the host's on-chain wallet (Tempo) for direct payouts.
+	PayoutAddress *string `json:"payout_address"`
 }
 
 type Service struct {
@@ -169,9 +172,9 @@ func (s *Service) DeleteSession(ctx context.Context, token string) error {
 func (s *Service) UserBySession(ctx context.Context, token string) (*User, error) {
 	u := &User{}
 	err := s.DB.QueryRow(ctx,
-		`SELECT u.id, u.email, u.display_name, u.created_at FROM sessions s JOIN users u ON u.id=s.user_id
+		`SELECT u.id, u.email, u.display_name, u.created_at, u.payout_address FROM sessions s JOIN users u ON u.id=s.user_id
 		 WHERE s.id=$1 AND s.expires_at > now()`, HashToken(token)).
-		Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt)
+		Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.PayoutAddress)
 	if err != nil {
 		return nil, err
 	}
@@ -182,12 +185,41 @@ func (s *Service) UserByAPIKey(ctx context.Context, key string) (*User, error) {
 	u := &User{}
 	err := s.DB.QueryRow(ctx,
 		`UPDATE api_keys k SET last_used=now() FROM users u WHERE u.id=k.user_id AND k.key_hash=$1
-		 RETURNING u.id, u.email, u.display_name, u.created_at`, HashToken(key)).
-		Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt)
+		 RETURNING u.id, u.email, u.display_name, u.created_at, u.payout_address`, HashToken(key)).
+		Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.PayoutAddress)
 	if err != nil {
 		return nil, err
 	}
 	return u, nil
+}
+
+var addrRe = regexp.MustCompile(`^0x[0-9a-fA-F]{40}$`)
+
+// ErrBadAddress is returned for a malformed payout address.
+var ErrBadAddress = errors.New("payout address must be a 0x-prefixed 20-byte hex address")
+
+// SetPayoutAddress stores (or clears, with "") the user's on-chain payout wallet.
+func (s *Service) SetPayoutAddress(ctx context.Context, userID, addr string) error {
+	addr = strings.TrimSpace(addr)
+	var v *string
+	if addr != "" {
+		if !addrRe.MatchString(addr) {
+			return ErrBadAddress
+		}
+		v = &addr
+	}
+	_, err := s.DB.Exec(ctx, `UPDATE users SET payout_address=$2 WHERE id=$1`, userID, v)
+	return err
+}
+
+// PayoutAddressForHost returns the wallet of the user who owns a host ("" if unset).
+func (s *Service) PayoutAddressForHost(ctx context.Context, hostID string) (string, error) {
+	var v *string
+	err := s.DB.QueryRow(ctx, `SELECT u.payout_address FROM hosts h JOIN users u ON u.id=h.user_id WHERE h.id=$1`, hostID).Scan(&v)
+	if err != nil || v == nil {
+		return "", err
+	}
+	return *v, nil
 }
 
 // CreateAPIKey returns the raw key (shown once) for programmatic / AI-agent access.

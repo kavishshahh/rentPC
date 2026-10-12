@@ -100,6 +100,11 @@ export default function RentalPage() {
             </Badge>
           </a>
         )}
+        {rental.host_payout_cents ? (
+          <Badge variant="outline" title={rental.host_payout_address ?? ""}>
+            host paid {money(rental.host_payout_cents, rental.currency)} on-chain
+          </Badge>
+        ) : null}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-4">

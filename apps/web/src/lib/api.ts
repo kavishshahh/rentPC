@@ -3,7 +3,7 @@
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
-export type User = { id: string; email: string; display_name: string; created_at: string };
+export type User = { id: string; email: string; display_name: string; created_at: string; payout_address: string | null };
 
 export type Virt = { whpx: boolean; hyperv: boolean; hvf: boolean; vz: boolean; kvm: boolean; qemu: boolean };
 
@@ -42,6 +42,7 @@ export type Rental = {
   reservation_expires_at: string; starts_at: string | null; ends_at: string | null;
   ssh_username: string; ssh_pubkey: string; sandbox_id: string | null; failure_reason: string | null;
   prepaid_provider: string | null; prepaid_ref: string | null;
+  host_payout_cents: number | null; host_payout_address: string | null;
   created_at: string; updated_at: string; host_online: boolean; estimated_cost_cents: number; machine_title?: string;
 };
 

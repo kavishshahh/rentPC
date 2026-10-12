@@ -23,7 +23,12 @@ type PrepaidClaim struct {
 	ListingID   string `json:"listing_id"`
 	Hours       int    `json:"hours"`
 	Payer       string `json:"payer,omitempty"`
-	IssuedAt    int64  `json:"iat"`
+	// HostPayoutCents/Address: the part of the amount that went straight to
+	// the host's wallet via an MPP split transfer (0 / "" when the host has no
+	// payout wallet and the treasury holds the funds).
+	HostPayoutCents   int64  `json:"host_payout_cents,omitempty"`
+	HostPayoutAddress string `json:"host_payout_address,omitempty"`
+	IssuedAt          int64  `json:"iat"`
 }
 
 const PrepaidHeader = "X-RentPC-Prepaid"

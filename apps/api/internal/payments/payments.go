@@ -22,6 +22,9 @@ type Authorization struct {
 	Ref       string
 	Amount    Money
 	ExpiresAt time.Time
+	// HostPayoutCents is the portion already transferred to the host on-chain
+	// (prepaid providers with split payments); 0 for holds.
+	HostPayoutCents int64
 }
 
 type Provider interface {
@@ -78,6 +81,12 @@ func (m *Mock) CaptureAs(ctx context.Context, provider string, auth *Authorizati
 	}
 	if fee.AmountCents > 0 {
 		if _, err := tx.Exec(ctx, ins, rentalID, hostUserID, "fee", -fee.AmountCents, fee.Currency, provider, auth.Ref); err != nil {
+			return err
+		}
+	}
+	// Paid straight to the host's wallet on-chain: nothing is owed by the platform.
+	if auth.HostPayoutCents > 0 {
+		if _, err := tx.Exec(ctx, ins, rentalID, hostUserID, "payout", -auth.HostPayoutCents, actual.Currency, provider, auth.Ref); err != nil {
 			return err
 		}
 	}

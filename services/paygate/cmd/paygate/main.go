@@ -95,11 +95,15 @@ type rentBody struct {
 }
 
 type quote struct {
-	TotalCents int64  `json:"total_cents"`
-	Currency   string `json:"currency"`
-	Title      string `json:"title"`
-	Available  bool   `json:"available"`
+	TotalCents        int64  `json:"total_cents"`
+	Currency          string `json:"currency"`
+	Title             string `json:"title"`
+	Available         bool   `json:"available"`
+	HostPayoutCents   int64  `json:"host_payout_cents"`
+	HostPayoutAddress string `json:"host_payout_address"`
 }
+
+func cents(c int64) string { return fmt.Sprintf("%d.%02d", c/100, c%100) }
 
 func (g *gateway) rent(w http.ResponseWriter, r *http.Request) {
 	// Metered: API-key clients (agents) and browser sessions that opted in
@@ -122,6 +126,12 @@ func (g *gateway) rent(w http.ResponseWriter, r *http.Request) {
 	if in.Hours < 1 {
 		in.Hours = 1
 	}
+	// Never take money for a request the API would reject: check the caller's
+	// identity (API key or session) before issuing a challenge.
+	if code := g.whoami(r); code != http.StatusOK {
+		g.proxy.ServeHTTP(w, r) // the API answers with its own 401
+		return
+	}
 	q, err := g.quote(r.Context(), in.ListingID, in.Hours)
 	if err != nil {
 		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadGateway)
@@ -133,13 +143,22 @@ func (g *gateway) rent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Direct host payout: one renter transaction, split between the host's
+	// wallet (price minus platform fee) and the treasury (the fee).
+	var splits []tempo.SplitParams
+	payoutCents := int64(0)
+	if q.HostPayoutAddress != "" && q.HostPayoutCents > 0 && q.HostPayoutCents < q.TotalCents {
+		payoutCents = q.HostPayoutCents
+		splits = []tempo.SplitParams{{Amount: cents(payoutCents), Recipient: q.HostPayoutAddress}}
+	}
 	result, err := g.payment.Charge(r.Context(), server.ChargeParams{
 		PaymentAuthorization: r.Header.Get(mpp.HeaderPaymentAuthorization),
-		Amount:               fmt.Sprintf("%d.%02d", q.TotalCents/100, q.TotalCents%100),
+		Amount:               cents(q.TotalCents),
 		Description:          fmt.Sprintf("rentPC: %s x %dh", q.Title, in.Hours),
 		ExternalID:           in.ListingID + ":" + fmt.Sprint(in.Hours),
 		Body:                 body,
 		Meta:                 map[string]string{"listing_id": in.ListingID, "hours": fmt.Sprint(in.Hours)},
+		Splits:               splits,
 	})
 	if err != nil {
 		if result != nil && result.Challenge != nil {
@@ -158,13 +177,41 @@ func (g *gateway) rent(w http.ResponseWriter, r *http.Request) {
 	// Verified on Tempo. Tell the API the money has moved.
 	c := claim.Prepaid{Provider: "mpp", Ref: result.Receipt.Reference, AmountCents: q.TotalCents, Currency: q.Currency,
 		ListingID: in.ListingID, Hours: in.Hours, Payer: result.Credential.Source}
+	if payoutCents > 0 {
+		c.HostPayoutCents, c.HostPayoutAddress = payoutCents, q.HostPayoutAddress
+	}
 	sig, err := claim.Sign(g.secret, c)
 	if err != nil {
 		http.Error(w, "sign failed", http.StatusInternalServerError)
 		return
 	}
-	slog.Info("payment verified", "listing", in.ListingID, "ref", result.Receipt.Reference, "payer", result.Credential.Source)
+	slog.Info("payment verified", "listing", in.ListingID, "ref", result.Receipt.Reference, "payer", result.Credential.Source,
+		"host_payout_cents", payoutCents, "host_payout_address", q.HostPayoutAddress)
 	g.forward(w, r, body, map[string]string{claim.Header: sig, mpp.HeaderPaymentReceipt: result.Receipt.ToPaymentReceipt()})
+}
+
+// whoami asks the API whether the caller is authenticated, forwarding the
+// same credentials (API key header or session cookie).
+func (g *gateway) whoami(r *http.Request) int {
+	u := *g.api
+	u.Path, u.RawQuery = "/v1/auth/me", ""
+	req, _ := http.NewRequestWithContext(r.Context(), http.MethodGet, u.String(), nil)
+	req.Header.Set("Authorization", r.Header.Get("Authorization"))
+	req.Header.Set("Cookie", r.Header.Get("Cookie"))
+	resp, err := g.client.Do(req)
+	if err != nil {
+		return http.StatusBadGateway
+	}
+	defer resp.Body.Close()
+	var out struct {
+		User *struct {
+			ID string `json:"id"`
+		} `json:"user"`
+	}
+	if resp.StatusCode != 200 || json.NewDecoder(resp.Body).Decode(&out) != nil || out.User == nil {
+		return http.StatusUnauthorized
+	}
+	return http.StatusOK
 }
 
 func (g *gateway) quote(ctx context.Context, listingID string, hours int) (*quote, error) {

@@ -1,6 +1,7 @@
 package http
 
 import (
+	"errors"
 	"net/http"
 	"time"
 
@@ -85,6 +86,27 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]any{"user": u})
+}
+
+// setPayoutAddress stores the host's Tempo wallet for direct on-chain payouts.
+func (s *Server) setPayoutAddress(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Address string `json:"address"`
+	}
+	if err := decode(r, &in); err != nil {
+		writeErr(w, 400, "bad json")
+		return
+	}
+	u := auth.CurrentUser(r.Context())
+	if err := s.Auth.SetPayoutAddress(r.Context(), u.ID, in.Address); err != nil {
+		if errors.Is(err, auth.ErrBadAddress) {
+			writeErr(w, 400, err.Error())
+			return
+		}
+		mapErr(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"ok": true})
 }
 
 func (s *Server) createAPIKey(w http.ResponseWriter, r *http.Request) {

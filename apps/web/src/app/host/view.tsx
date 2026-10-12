@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Laptop, Monitor, Plus, Server } from "lucide-react";
+import { Laptop, Monitor, Plus, Server, Wallet } from "lucide-react";
 import { api, isLive, type Earnings, type Host, type Rental } from "@/lib/api";
 import { gb, money, timeLeft } from "@/lib/utils";
 import { useAuth } from "@/components/auth-provider";
@@ -16,8 +16,21 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function HostDashboard() {
-  const { user, loading } = useAuth();
+  const { user, loading, refresh } = useAuth();
   const router = useRouter();
+  const [payout, setPayout] = React.useState("");
+  const [payoutMsg, setPayoutMsg] = React.useState<string | null>(null);
+  React.useEffect(() => { setPayout(user?.payout_address ?? ""); }, [user?.payout_address]);
+  async function savePayout() {
+    setPayoutMsg(null);
+    try {
+      await api("/v1/account/payout", { method: "PUT", body: { address: payout.trim() } });
+      await refresh();
+      setPayoutMsg(payout.trim() ? "Saved. Renters now pay your wallet directly." : "Cleared. Earnings accrue to your balance.");
+    } catch (e) {
+      setPayoutMsg(e instanceof Error ? e.message : String(e));
+    }
+  }
   const [hosts, setHosts] = React.useState<Host[] | null>(null);
   const [earnings, setEarnings] = React.useState<Earnings | null>(null);
   const [rentals, setRentals] = React.useState<Rental[]>([]);
@@ -107,6 +120,20 @@ export default function HostDashboard() {
         <Stat label="Completed rentals" value={String(earnings?.completed_rentals ?? 0)} />
         <Stat label="Hours rented" value={(earnings?.hours_rented ?? 0).toFixed(1)} />
       </div>
+
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2"><Wallet className="size-4" /> Get paid on-chain</CardTitle></CardHeader>
+        <CardContent className="space-y-2">
+          <p className="text-sm text-muted-foreground">
+            Enter a Tempo wallet address and every rental paid over MPP sends your share ({100 - 10}% of the price) straight to it in the renter&apos;s own transaction — the platform fee goes to the treasury, nothing is held for you.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input placeholder="0x… your Tempo wallet" value={payout} onChange={(e) => setPayout(e.target.value)} className="w-full max-w-md font-mono text-xs" spellCheck={false} />
+            <Button size="sm" onClick={savePayout} disabled={payout.trim() === (user?.payout_address ?? "")}>Save</Button>
+          </div>
+          {payoutMsg && <p className="text-xs text-muted-foreground">{payoutMsg}</p>}
+        </CardContent>
+      </Card>
 
       <section className="space-y-3">
         <h2 className="text-base font-medium">Machines</h2>

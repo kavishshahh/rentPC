@@ -8,6 +8,7 @@ import (
 
 	"github.com/cadencz/rentpc/apps/api/internal/auth"
 	"github.com/cadencz/rentpc/apps/api/internal/machines"
+	"github.com/cadencz/rentpc/apps/api/internal/payments"
 )
 
 func (s *Server) listHosts(w http.ResponseWriter, r *http.Request) {
@@ -178,10 +179,15 @@ func (s *Server) quote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	total := int64(hours) * int64(it.Listing.PriceCentsPerHour)
+	payout, _ := s.Auth.PayoutAddressForHost(r.Context(), it.HostID)
+	fee := payments.Fee(payments.Money{AmountCents: total}).AmountCents
 	writeJSON(w, 200, map[string]any{
 		"listing_id": it.Listing.ID, "hours": hours, "price_cents_per_hour": it.Listing.PriceCentsPerHour,
 		"total_cents": total, "currency": it.Listing.Currency, "available": it.Available,
 		"host_id": it.HostID, "title": it.Listing.Title,
+		// On-chain split: the gateway routes total-fee to the host's wallet when set.
+		"platform_fee_bps": payments.PlatformFeeBps, "platform_fee_cents": fee,
+		"host_payout_cents": total - fee, "host_payout_address": payout,
 	})
 }
 

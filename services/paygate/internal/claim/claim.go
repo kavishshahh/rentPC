@@ -20,7 +20,10 @@ type Prepaid struct {
 	ListingID   string `json:"listing_id"`
 	Hours       int    `json:"hours"`
 	Payer       string `json:"payer,omitempty"`
-	IssuedAt    int64  `json:"iat"`
+	// Portion routed straight to the host's wallet via an MPP split transfer.
+	HostPayoutCents   int64  `json:"host_payout_cents,omitempty"`
+	HostPayoutAddress string `json:"host_payout_address,omitempty"`
+	IssuedAt          int64  `json:"iat"`
 }
 
 func Sign(secret string, c Prepaid) (string, error) {

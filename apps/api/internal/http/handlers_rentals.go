@@ -51,7 +51,8 @@ func (s *Server) createRental(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, 402, "prepaid claim does not match this request")
 			return
 		}
-		prepaid = &rentals.Prepaid{Provider: claim.Provider, Ref: claim.Ref, AmountCents: claim.AmountCents, Currency: claim.Currency}
+		prepaid = &rentals.Prepaid{Provider: claim.Provider, Ref: claim.Ref, AmountCents: claim.AmountCents, Currency: claim.Currency,
+			HostPayoutCents: claim.HostPayoutCents, HostPayoutAddress: claim.HostPayoutAddress}
 	}
 	rental, privKey, err := s.Rentals.Reserve(r.Context(), rentals.ReserveInput{
 		RenterID: auth.CurrentUser(r.Context()).ID, ListingID: in.ListingID, Hours: in.Hours, Prepaid: prepaid,
