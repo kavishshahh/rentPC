@@ -31,7 +31,7 @@ type Server struct {
 
 func (s *Server) Router() http.Handler {
 	r := chi.NewRouter()
-	r.Use(middleware.RealIP, middleware.RequestID, middleware.Recoverer, middleware.Timeout(60*time.Second))
+	r.Use(middleware.RealIP, middleware.RequestID, middleware.Recoverer, requestTimeout(60*time.Second))
 	r.Use(s.cors)
 	r.Use(s.Auth.Middleware)
 
@@ -141,6 +141,23 @@ func (s *Server) cors(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// requestTimeout bounds ordinary requests but leaves long-lived connections
+// (agent relay, renter terminal/tunnel WebSockets) alone.
+func requestTimeout(d time.Duration) func(http.Handler) http.Handler {
+	t := middleware.Timeout(d)
+	return func(next http.Handler) http.Handler {
+		timed := t(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			p := r.URL.Path
+			if strings.HasSuffix(p, "/terminal") || strings.HasSuffix(p, "/tunnel") || strings.HasSuffix(p, "/agent/connect") {
+				next.ServeHTTP(w, r)
+				return
+			}
+			timed.ServeHTTP(w, r)
+		})
+	}
 }
 
 func qInt(r *http.Request, k string) int {
