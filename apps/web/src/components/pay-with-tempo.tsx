@@ -3,10 +3,10 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Wallet, Droplets, Coins } from "lucide-react";
-import { useAccount, useConnect, useDisconnect } from "wagmi";
+import { useAccount, useConnect, useDisconnect, useSwitchChain } from "wagmi";
 import { Hooks } from "wagmi/tempo";
 import { API_URL, type Rental } from "@/lib/api";
-import { mppx, PATHUSD } from "@/lib/wagmi";
+import { mppx, PATHUSD, tempoChain } from "@/lib/wagmi";
 import { money } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
@@ -20,11 +20,13 @@ type Props = { listingId: string; hours: number; totalCents: number; currency: s
  */
 export function PayWithTempo({ listingId, hours, totalCents, currency, disabled }: Props) {
   const router = useRouter();
-  const { address, status } = useAccount();
+  // chainId is the wallet's chain (undefined when it is on a network wagmi does not know).
+  const { address, status, chainId } = useAccount();
   const { connectors, connect, isPending: connecting, error: connectError } = useConnect();
   const [secure, setSecure] = React.useState(true);
   React.useEffect(() => { setSecure(typeof window !== "undefined" && window.isSecureContext); }, []);
   const { disconnect } = useDisconnect();
+  const { switchChainAsync } = useSwitchChain();
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [step, setStep] = React.useState<string>("");
@@ -42,6 +44,12 @@ export function PayWithTempo({ listingId, hours, totalCents, currency, disabled 
     setBusy(true);
     setError(null);
     try {
+      // Browser wallets often sit on Ethereum mainnet; move them to Tempo first
+      // (adds the network to the wallet if it is unknown).
+      if (chainId !== tempoChain.id) {
+        setStep("Switching wallet to Tempo…");
+        await switchChainAsync({ chainId: tempoChain.id });
+      }
       setStep("Requesting price (HTTP 402)…");
       const res = await mppx.fetch(`${API_URL}/v1/rentals`, {
         method: "POST",
@@ -103,6 +111,9 @@ export function PayWithTempo({ listingId, hours, totalCents, currency, disabled 
         <span className="flex items-center gap-1 text-muted-foreground"><Coins className="size-3.5" /> pathUSD balance</span>
         <span className="font-medium">{bal === null ? "…" : bal.toFixed(2)}</span>
       </div>
+      {chainId !== tempoChain.id && (
+        <p className="text-xs text-muted-foreground">Wallet is on {chainId ? `chain ${chainId}` : "another network"}; it will be switched to Tempo testnet ({tempoChain.id}) when you pay.</p>
+      )}
       {!enough && (
         <Button size="sm" variant="outline" className="w-full" disabled={fund.isPending} onClick={() => fund.mutate({ account: address })}>
           <Droplets /> {fund.isPending ? "Funding from testnet faucet…" : "Get testnet pathUSD (faucet)"}

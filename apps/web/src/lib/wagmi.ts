@@ -7,14 +7,15 @@ import { Mppx, tempo } from "mppx/client";
 import { Chain } from "viem/tempo";
 import { createConfig, http } from "wagmi";
 import { getConnectorClient } from "wagmi/actions";
-import { metaMask } from "wagmi/connectors";
+import { injected } from "wagmi/connectors";
 import { webAuthn } from "wagmi/tempo";
 
 export const tempoChain = Chain.testnet; // Moderato, chain id 42431
 
 export const wagmiConfig = createConfig({
   chains: [tempoChain],
-  connectors: [webAuthn(), metaMask()],
+  // webAuthn = passkey wallet (nothing to install); injected = MetaMask / Brave / Phantom etc.
+  connectors: [webAuthn(), injected()],
   transports: { [tempoChain.id]: http() },
   ssr: true,
 });
