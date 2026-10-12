@@ -46,6 +46,7 @@ func (s *Server) Router() http.Handler {
 		r.Post("/auth/logout", s.logout)
 		r.Get("/auth/me", s.me)
 		r.With(auth.Require).Post("/auth/api-keys", s.createAPIKey)
+		r.With(auth.Require).Put("/account/payout", s.setPayoutAddress)
 
 		// Marketplace (public reads)
 		r.Get("/market", s.market)
