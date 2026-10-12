@@ -1,23 +1,29 @@
-# SITE_ADDRESS is ":80" for plain-IP access, or "rentpc.example.com" for
-# automatic HTTPS once a domain points at the instance.
-{$SITE_ADDRESS}
+# SITE_ADDRESS is ":80" for plain-IP access. For automatic HTTPS set it to a
+# domain, keeping plain HTTP alive for host agents registered against the IP:
+#   SITE_ADDRESS="44.222.123.73.sslip.io, http://:80"
+# (sslip.io resolves <ip>.sslip.io to <ip>, so no DNS setup is needed.)
+(rentpc) {
+	encode gzip
 
-encode gzip
+	# Rentals go through the payment gateway when enabled (RENT_UPSTREAM=paygate:8090).
+	@rent {
+		path /v1/rentals
+		method POST
+	}
+	handle @rent {
+		reverse_proxy {$RENT_UPSTREAM}
+	}
 
-# Rentals go through the payment gateway when enabled (RENT_UPSTREAM=paygate:8090).
-@rent {
-	path /v1/rentals
-	method POST
+	@api path /v1/* /healthz
+	handle @api {
+		reverse_proxy api:8080
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
 }
-handle @rent {
-	reverse_proxy {$RENT_UPSTREAM}
-}
 
-@api path /v1/* /healthz
-handle @api {
-	reverse_proxy api:8080
-}
-
-handle {
-	reverse_proxy web:3000
+{$SITE_ADDRESS} {
+	import rentpc
 }

@@ -21,7 +21,9 @@ type Props = { listingId: string; hours: number; totalCents: number; currency: s
 export function PayWithTempo({ listingId, hours, totalCents, currency, disabled }: Props) {
   const router = useRouter();
   const { address, status } = useAccount();
-  const { connectors, connect, isPending: connecting } = useConnect();
+  const { connectors, connect, isPending: connecting, error: connectError } = useConnect();
+  const [secure, setSecure] = React.useState(true);
+  React.useEffect(() => { setSecure(typeof window !== "undefined" && window.isSecureContext); }, []);
   const { disconnect } = useDisconnect();
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -70,12 +72,19 @@ export function PayWithTempo({ listingId, hours, totalCents, currency, disabled 
         <div className="flex items-center gap-2 text-sm font-medium"><Wallet className="size-4" /> Pay with a Tempo wallet</div>
         <p className="text-xs text-muted-foreground">Stablecoin payment over MPP (HTTP 402) on Tempo testnet. A passkey wallet needs nothing installed.</p>
         <div className="flex flex-wrap gap-2">
-          {connectors.map((c) => (
-            <Button key={c.uid} size="sm" variant="outline" disabled={connecting || disabled} onClick={() => connect({ connector: c })}>
-              {c.type === "webAuthn" ? "Connect (Passkey)" : `Connect (${c.name})`}
-            </Button>
-          ))}
+          {connectors.map((c) => {
+            const passkey = c.type === "webAuthn";
+            return (
+              <Button key={c.uid} size="sm" variant="outline" disabled={connecting || disabled || (passkey && !secure)}
+                title={passkey && !secure ? "Passkeys need an https:// page" : undefined}
+                onClick={() => connect({ connector: c })}>
+                {passkey ? "Connect (Passkey)" : `Connect (${c.name})`}
+              </Button>
+            );
+          })}
         </div>
+        {!secure && <p className="text-xs text-muted-foreground">Passkey wallets need HTTPS; open this page over https:// or use MetaMask.</p>}
+        {connectError && <p className="text-xs text-destructive break-words">{connectError.message.split("\n")[0]}</p>}
         {error && <p className="text-xs text-destructive">{error}</p>}
       </div>
     );
