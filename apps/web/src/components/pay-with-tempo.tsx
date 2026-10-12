@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Wallet, Droplets, Coins, Mail } from "lucide-react";
 import { useAccount, useConnect, useDisconnect, useSwitchChain } from "wagmi";
 import { Hooks } from "wagmi/tempo";
-import { usePrivy, useWallets } from "@privy-io/react-auth";
+import { useCreateWallet, usePrivy, useWallets } from "@privy-io/react-auth";
 import { toViemAccount } from "@privy-io/react-auth/tempo";
 import { createWalletClient, http } from "viem";
 import { API_URL, type Rental } from "@/lib/api";
@@ -41,7 +41,17 @@ export function PayWithTempo({ listingId, hours, totalCents, currency, disabled 
   // handed to mppx so the 402 payment is signed by it.
   const privy = usePrivy();
   const { wallets: privyWallets, ready: privyWalletsReady } = useWallets();
+  const { createWallet } = useCreateWallet();
   const privyWallet = privy.authenticated ? privyWallets.find((w) => w.walletClientType === "privy") : undefined;
+  const [creating, setCreating] = React.useState(false);
+  // Normally createOnLogin makes the wallet during login; if the user signed in
+  // before that setting existed (or it was off in the dashboard) make it now.
+  React.useEffect(() => {
+    if (!privy.ready || !privy.authenticated || !privyWalletsReady || privyWallet || creating) return;
+    if (privy.user?.linkedAccounts?.some((a) => a.type === "wallet" && "walletClientType" in a && a.walletClientType === "privy")) return;
+    setCreating(true);
+    createWallet().catch((e) => setError(`Privy wallet: ${e instanceof Error ? e.message : String(e)}`)).finally(() => setCreating(false));
+  }, [privy.ready, privy.authenticated, privy.user, privyWalletsReady, privyWallet, creating, createWallet]);
   const [privyAddress, setPrivyAddress] = React.useState<`0x${string}` | null>(null);
   React.useEffect(() => {
     let cancelled = false;
@@ -114,6 +124,7 @@ export function PayWithTempo({ listingId, hours, totalCents, currency, disabled 
 
   if (status !== "connected" || !address) {
     const privyBusy = privy.authenticated && (!privyWalletsReady || !privyAddress);
+    const privyEmail = privy.user?.email?.address ?? privy.user?.google?.email;
     return (
       <div className="space-y-2 rounded-lg border p-3">
         <div className="flex items-center gap-2 text-sm font-medium"><Wallet className="size-4" /> Pay with a Tempo wallet</div>
@@ -132,6 +143,12 @@ export function PayWithTempo({ listingId, hours, totalCents, currency, disabled 
             <Mail /> {privyBusy ? "Preparing wallet…" : "Log in with email (Privy)"}
           </Button>
         </div>
+        {privy.authenticated && !privyAddress && (
+          <p className="text-xs text-muted-foreground">
+            Signed in to Privy{privyEmail ? ` as ${privyEmail}` : ""} — {privyWalletsReady ? (privyWallets.length ? `preparing wallet (${privyWallets.map((w) => w.walletClientType).join(", ")})` : creating ? "creating your Tempo wallet…" : "no wallet yet") : "loading wallets…"}.
+            {" "}<button className="underline" onClick={() => privy.logout()}>Sign out of Privy</button>
+          </p>
+        )}
         {!secure && <p className="text-xs text-muted-foreground">Passkey wallets need HTTPS; open this page over https://.</p>}
         {connectError && <p className="text-xs text-destructive break-words">{connectError.message.split("\n")[0]}</p>}
         {error && <p className="text-xs text-destructive">{error}</p>}
