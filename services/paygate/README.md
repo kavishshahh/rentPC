@@ -32,7 +32,7 @@ This module needs Go 1.26 (mpp-go requirement) and therefore lives apart from
 | `MPP_RECIPIENT` | Tempo address that receives payments |
 | `MPP_REALM` | realm shown in challenges, e.g. your API host |
 | `TEMPO_RPC_URL` | default `https://rpc.moderato.tempo.xyz` (testnet) |
-| `MPP_CURRENCY` | token address; default OUSD |
+| `MPP_CURRENCY` | token address; the code defaults to OUSD, but `deploy/aws` pins pathUSD (`0x20c0…0000`), the token the faucet hands out |
 
 ## Agent CLI
 
