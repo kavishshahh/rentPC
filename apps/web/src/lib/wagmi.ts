@@ -6,6 +6,7 @@
 import { Mppx, tempo } from "mppx/client";
 import { Chain } from "viem/tempo";
 import { createConfig, http } from "wagmi";
+import type { Client } from "viem";
 import { getConnectorClient } from "wagmi/actions";
 import { webAuthn } from "wagmi/tempo";
 
@@ -31,12 +32,20 @@ declare module "wagmi" {
   }
 }
 
+// A wallet source other than wagmi (the Privy embedded wallet) registers its
+// viem wallet client here; while set, MPP payments are signed by it.
+let externalClient: Client | null = null;
+export function setExternalWalletClient(c: Client | null) {
+  externalClient = c;
+}
+
 // Does NOT polyfill global fetch: the rest of the app must not be intercepted.
 export const mppx = Mppx.create({
   methods: [
     tempo({
       mode: "push",
-      getClient: () => getConnectorClient(wagmiConfig),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      getClient: () => (externalClient ? Promise.resolve(externalClient as any) : getConnectorClient(wagmiConfig)),
     }),
   ],
   polyfill: false,

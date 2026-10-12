@@ -28,18 +28,24 @@ agent ──POST /v1/rentals {listing_id, hours}──────────�
 * `rentpc-pay` — reference agent client: `POST`, pay the 402 under a
   `--max-spend` budget, retry, print the rental and receipt.
 
-* **In-browser wallet flow** — the machine page has "Pay with a Tempo wallet":
-  wagmi + `mppx/client` with a **passkey wallet (nothing to install) or
-  MetaMask**, a one-click testnet faucet, then a single pathUSD/OUSD transfer
-  signed in the wallet satisfies the 402 and the rental is created. The rental
-  page links the on-chain transaction on explore.tempo.xyz.
+* **In-browser wallet flow** — the machine page has "Pay with a Tempo wallet"
+  with two ways to get a wallet, neither needing an extension or seed phrase:
+  a **Tempo passkey wallet** (`wagmi/tempo` webAuthn connector) or a **Privy
+  embedded wallet** behind email / Google login (`@privy-io/react-auth`,
+  `toViemAccount` → viem wallet client handed to `mppx`). Both are Tempo
+  accounts (EIP-7702) that batch calls, so the one transaction they sign pays
+  the host's 90% and the platform's 10% atomically. A one-click testnet faucet
+  funds the wallet; the rental page links the transaction on explore.tempo.xyz.
+  Plain EOA extension wallets (MetaMask) are not offered: they cannot batch on
+  Tempo, so they could not sign the split.
 
 * **Hosts are paid on-chain, in the renter's transaction.** A host enters a
-  Tempo wallet on the host dashboard; the gateway then issues the challenge as
-  an MPP **split payment**: `amount = price`, `recipient = treasury`,
+  Tempo wallet on the host dashboard; the gateway then issues every challenge
+  as an MPP **split payment**: `amount = price`, `recipient = treasury`,
   `splits = [{recipient: host wallet, amount: price − 10% fee}]`. The renter
-  signs one transfer, the host's share lands in their wallet and the treasury
-  keeps only the fee — no custody, no payout batch. The API ledger records the
+  (agent, passkey wallet or Privy wallet) signs one transaction, the host's
+  share lands in their wallet and the treasury keeps only the fee — no
+  custody, no payout batch. The API ledger records the
   gross earning, the fee and a matching `payout` row referencing the tx, so
   "owed to host" is zero for these rentals. Hosts without a wallet accrue a
   balance as before.
@@ -81,7 +87,7 @@ npx mppx fetch -X POST http://<host>/v1/rentals -H "Authorization: Bearer rpk_..
 | Seam | Where | Next provider |
 |---|---|---|
 | Payments | `payments.Provider` (`Authorize/Capture/Release`) + prepaid claims | **x402 on Solana** (same gateway, second method), MPP sessions for streaming |
-| Identity | session cookie / API key (`auth.Service`) | wallet-signature login (Phantom Connect / Privy), agent identity via `mppx` |
+| Identity | session cookie / API key (`auth.Service`); Privy login for the wallet | sign-in-with-wallet for the rentPC account itself; Privy server wallets with spend policies for agents (Privy's MPP recipe) |
 | Escrow & refunds | ledger rows per rental; prepaid flag; split payouts | MPP **sessions** for metered per-minute billing with automatic refund of unused time |
 | Usage receipts | `usage_samples` + `rental_events` per rental | host + platform co-signed receipt, hash anchored on Tempo/Solana |
 | Privacy | — | confidential amounts via Token-2022 Confidential Balances / Arcium |
