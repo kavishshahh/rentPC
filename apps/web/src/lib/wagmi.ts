@@ -13,7 +13,7 @@ import { webAuthn } from "wagmi/tempo";
 // Moderato, chain id 42431. viem waits max(blockTime*3, 5s) for a wallet-submitted
 // call bundle to confirm; Tempo's real 1s block time would give a human 5 seconds
 // to approve the MetaMask popup. Stretch it so the wait covers the approval.
-export const tempoChain = { ...Chain.testnet, blockTime: 60_000 } as typeof Chain.testnet;
+export const tempoChain = { ...Chain.testnet, blockTime: 60_000 } as unknown as typeof Chain.testnet;
 
 export const wagmiConfig = createConfig({
   chains: [tempoChain],
