@@ -90,6 +90,18 @@ has the owner's personal data unless the owner opts in.
 | Agent binary tampering | Signed releases, version pinned by backend minimum; later: attestation. |
 | Relay compromise | Relay sees SSH ciphertext only for native-SSH tunnels (end-to-end between renter's ssh and the guest sshd). Web-terminal PTY traffic is plaintext inside the relay — documented; native SSH recommended for sensitive work. |
 
+## Hosts behind TLS inspection (Netskope, Zscaler, antivirus "HTTPS scanning")
+
+Such hosts re-sign every HTTPS connection with a private CA that only the
+host trusts. A rental VM has a clean trust store, so renters' `pip`, `git`
+and API calls fail with certificate errors. This is the *correct* outcome:
+installing the interceptor's CA into renter VMs would hand the host's
+employer (or AV vendor) every renter's plaintext. rentPC therefore never
+does that; instead `rentpc-host doctor` and the agent's startup log detect
+interception and tell the host to use a network without it. A later
+version can mark such hosts "HTTP-only / restricted egress" in the
+marketplace.
+
 ## Operational limitations (honest list)
 
 * Consumer laptops with hybrid graphics: no GPU in a VM; CPU-only.

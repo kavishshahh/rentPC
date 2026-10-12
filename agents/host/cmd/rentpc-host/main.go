@@ -147,6 +147,10 @@ func cmdRun(args []string) {
 			slog.Error("base image", "err", err)
 		}
 	}
+	if iss, bad, err := hwdetect.TLSInterception(ctx); err == nil && bad {
+		slog.Warn("this network intercepts HTTPS; renters' HTTPS connections will fail inside VMs", "issuer", iss,
+			"hint", "host from a network without TLS inspection (e.g. home Wi-Fi / hotspot)")
+	}
 	go sup.RunExpiryEnforcer(ctx)
 	slog.Info("rentpc-host starting", "version", version, "driver", drv.Name(), "server", creds.Server, "host_id", creds.HostID)
 	cl.Run(ctx)
@@ -187,6 +191,16 @@ func cmdDoctor(args []string) {
 	}
 	ok(hw.DiskFreeGB >= 40, fmt.Sprintf("≥ 40 GB free in data dir (%d GB)", hw.DiskFreeGB), "free up space or set --data-dir")
 	ok(hw.RAMMB >= 8192, fmt.Sprintf("≥ 8 GB RAM (%d MB)", hw.RAMMB), "")
+	if iss, bad, err := hwdetect.TLSInterception(context.Background()); err != nil {
+		fmt.Printf("  · HTTPS probe failed (%v) — is this machine online?\n", err)
+	} else {
+		ok(!bad, "HTTPS is not intercepted on this network", "")
+		if bad {
+			fmt.Printf("    This network re-signs HTTPS (issuer: %q — e.g. Netskope/Zscaler/antivirus).\n", iss)
+			fmt.Println("    Rental VMs will refuse those certificates, so renters' HTTPS (pip, git, APIs) will fail.")
+			fmt.Println("    rentPC will NOT install that CA into renter VMs. Host from a network without TLS inspection.")
+		}
+	}
 	fmt.Println("\nGPU access in rentals: not available in this version (CPU-only VM tier). See docs/ARCHITECTURE.md §1.2.")
 	if _, err := os.Stat(credsPath(*dataDir)); err == nil {
 		fmt.Println("Registered: yes (" + credsPath(*dataDir) + ")")
