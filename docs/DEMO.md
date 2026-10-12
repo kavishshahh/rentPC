@@ -172,3 +172,6 @@ curl -s "https://44.222.123.73.sslip.io/v1/market/294b79de-ad53-434d-abf5-e7835b
   `payment verified … host_payout_cents=45`.
 * Privy login fails → Privy dashboard → app → allowed origins must include
   `https://44.222.123.73.sslip.io`.
+
+cd C:\Users\kavis\OneDrive\Desktop\rentPC\apps\web
+PS C:\Users\kavis\OneDrive\Desktop\rentPC\apps\web> node -e "const {generatePrivateKey, privateKeyToAccount}=require('viem/accounts'); const k=generatePrivateKey(); console.log('address:', privateKeyToAccount(k).address); console.log('private key:', k)"
